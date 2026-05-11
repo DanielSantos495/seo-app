@@ -33,6 +33,30 @@ export const GET_PRODUCTS_SEO_QUERY = `#graphql
   }
 `;
 
+export const GET_PRODUCT_SEO_QUERY = `#graphql
+  query GetProductSeo($id: ID!) {
+    product(id: $id) {
+      id
+      title
+      handle
+      descriptionHtml
+      seo {
+        title
+        description
+      }
+      images(first: 10) {
+        edges {
+          node {
+            id
+            altText
+            url
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const UPDATE_PRODUCT_IMAGES_MUTATION = `#graphql
   mutation UpdateProductImages($input: ProductInput!) {
     productUpdate(input: $input) {
@@ -77,6 +101,16 @@ export async function fetchAllProducts(admin, { limit } = {}) {
   }
 
   return products;
+}
+
+// Trae un único producto por GID. Devuelve `null` si no existe.
+export async function fetchProductById(admin, gid) {
+  const response = await admin.graphql(GET_PRODUCT_SEO_QUERY, {
+    variables: { id: gid },
+  });
+  const json = await response.json();
+  const product = json?.data?.product;
+  return product ? normalizeProduct(product) : null;
 }
 
 // Aplana `images.edges[].node` a un array simple — más cómodo para el analyzer.

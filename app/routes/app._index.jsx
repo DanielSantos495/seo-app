@@ -2,10 +2,11 @@ import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { fetchAllProducts } from "../services/shopify-api";
-import { analyzeProducts } from "../services/seo-analyzer";
-
-// Límite del plan free: análisis de los primeros N productos.
-const FREE_PLAN_PRODUCT_LIMIT = 25;
+import {
+  analyzeProducts,
+  FREE_PLAN_PRODUCT_LIMIT,
+} from "../services/seo-analyzer";
+import { gidToNumericId } from "../services/admin-links";
 
 export const loader = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
@@ -30,16 +31,21 @@ export default function Index() {
   return (
     <s-page heading="SEO Analyzer">
       <s-section heading="Score general de tu tienda">
-        <s-stack direction="inline" gap="large" alignment="center">
-          <s-heading size="large">{report.overallScore}/100</s-heading>
-          <s-text>
-            Promedio sobre {report.totalProducts} producto
-            {report.totalProducts === 1 ? "" : "s"} analizado
-            {report.totalProducts === 1 ? "" : "s"}
-            {report.totalProducts >= planLimit
-              ? ` (límite del plan free: ${planLimit}).`
-              : "."}
-          </s-text>
+        <s-stack direction="block" gap="base">
+          <s-stack direction="inline" gap="large" alignment="center">
+            <s-heading size="large">{report.overallScore}/100</s-heading>
+            <s-text>
+              Promedio sobre {report.totalProducts} producto
+              {report.totalProducts === 1 ? "" : "s"} analizado
+              {report.totalProducts === 1 ? "" : "s"}
+              {report.totalProducts >= planLimit
+                ? ` (límite del plan free: ${planLimit}).`
+                : "."}
+            </s-text>
+          </s-stack>
+          <s-button href="/app/products" variant="primary">
+            Ver todos los productos
+          </s-button>
         </s-stack>
       </s-section>
 
@@ -70,8 +76,9 @@ export default function Index() {
         <s-section heading="Productos con peor SEO">
           <s-stack direction="block" gap="base">
             {worstProducts.map((product) => (
-              <s-box
+              <s-clickable
                 key={product.productId}
+                href={`/app/products/${gidToNumericId(product.productId)}`}
                 padding="base"
                 borderWidth="base"
                 borderRadius="base"
@@ -87,7 +94,7 @@ export default function Index() {
                     </s-text>
                   </s-stack>
                 </s-stack>
-              </s-box>
+              </s-clickable>
             ))}
           </s-stack>
         </s-section>

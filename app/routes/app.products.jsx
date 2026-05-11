@@ -1,0 +1,259 @@
+import { useMemo, useState } from "react";
+import { useLoaderData } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
+import { authenticate } from "../shopify.server";
+import { fetchAllProducts } from "../services/shopify-api";
+import {
+  analyzeProduct,
+  FREE_PLAN_PRODUCT_LIMIT,
+} from "../services/seo-analyzer";
+import { gidToNumericId } from "../services/admin-links";
+
+export const loader = async ({ request }) => {
+  const { admin } = await authenticate.admin(request);
+
+  const products = await fetchAllProducts(admin);
+
+  // Plan free: solo los primeros N reciben análisis. Los demás quedan "locked".
+  const items = products.map((product, index) => {
+    if (index < FREE_PLAN_PRODUCT_LIMIT) {
+      const analysis = analyzeProduct(product);
+      return {
+        productId: product.id,
+        title: product.title,
+        handle: product.handle,
+        thumbnailUrl: product.images?.[0]?.url || null,
+        thumbnailAlt: product.images?.[0]?.altText || product.title,
+        score: analysis.score,
+        issues: analysis.issues,
+        locked: false,
+      };
+    }
+    return {
+      productId: product.id,
+      title: product.title,
+      handle: product.handle,
+      thumbnailUrl: product.images?.[0]?.url || null,
+      thumbnailAlt: product.images?.[0]?.altText || product.title,
+      score: null,
+      issues: [],
+      locked: true,
+    };
+  });
+
+  return { items, planLimit: FREE_PLAN_PRODUCT_LIMIT };
+};
+
+const SORT_OPTIONS = [
+  { value: "worst", label: "Peor score primero" },
+  { value: "best", label: "Mejor score primero" },
+  { value: "az", label: "Nombre A-Z" },
+  { value: "za", label: "Nombre Z-A" },
+];
+
+export default function Products() {
+  const { items, planLimit } = useLoaderData();
+
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState("worst");
+
+  const displayed = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? items.filter(
+          (item) =>
+            item.title.toLowerCase().includes(q) ||
+            item.handle.toLowerCase().includes(q),
+        )
+      : items;
+
+    const sorted = [...filtered];
+    // Locked siempre al final cuando ordenamos por score.
+    const byScore = (dir) => (a, b) => {
+      if (a.locked && !b.locked) return 1;
+      if (!a.locked && b.locked) return -1;
+      if (a.locked && b.locked) return 0;
+      const aScore = a.score ?? -1;
+      const bScore = b.score ?? -1;
+      return dir === "asc" ? aScore - bScore : bScore - aScore;
+    };
+
+    switch (sortKey) {
+      case "worst":
+        sorted.sort(byScore("asc"));
+        break;
+      case "best":
+        sorted.sort(byScore("desc"));
+        break;
+      case "az":
+        sorted.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case "za":
+        sorted.sort((a, b) => b.title.localeCompare(a.title));
+        break;
+      default:
+        break;
+    }
+    return sorted;
+  }, [items, query, sortKey]);
+
+  const lockedCount = items.filter((i) => i.locked).length;
+
+  return (
+    <s-page heading="Productos">
+      <s-link slot="breadcrumbActions" href="/app">
+        Dashboard
+      </s-link>
+
+      {lockedCount > 0 && (
+        <s-banner tone="info" heading="Estás en el plan Free">
+          <s-paragraph>
+            Analizamos los primeros {planLimit} productos. Tienes {lockedCount}{" "}
+            producto{lockedCount === 1 ? "" : "s"} más esperando análisis.
+            Mejora a Pro para desbloquear todos.
+          </s-paragraph>
+        </s-banner>
+      )}
+
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-stack direction="inline" gap="base">
+            <s-search-field
+              label="Buscar producto"
+              placeholder="Nombre o handle…"
+              value={query}
+              onInput={(event) => setQuery(event.target.value)}
+            />
+            <s-select
+              label="Ordenar por"
+              value={sortKey}
+              onChange={(event) => setSortKey(event.target.value)}
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <s-option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </s-option>
+              ))}
+            </s-select>
+          </s-stack>
+
+          {displayed.length === 0 ? (
+            <s-banner tone="info">
+              <s-paragraph>
+                {items.length === 0
+                  ? "Esta tienda aún no tiene productos."
+                  : `Ningún producto coincide con "${query}".`}
+              </s-paragraph>
+            </s-banner>
+          ) : (
+            <s-table>
+              <s-table-header-row>
+                <s-table-header>Producto</s-table-header>
+                <s-table-header>Score</s-table-header>
+                <s-table-header>Issues</s-table-header>
+                <s-table-header>Acción</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {displayed.map((item) => (
+                  <s-table-row key={item.productId}>
+                    <s-table-cell>
+                      <s-stack direction="inline" gap="base" alignment="center">
+                        {item.thumbnailUrl && (
+                          <s-thumbnail
+                            src={item.thumbnailUrl}
+                            alt={item.thumbnailAlt}
+                            size="small"
+                          />
+                        )}
+                        <s-stack direction="block" gap="tight">
+                          <s-text>{item.title}</s-text>
+                          <s-text tone="subdued">{item.handle}</s-text>
+                        </s-stack>
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      <ScoreBadge score={item.score} locked={item.locked} />
+                    </s-table-cell>
+                    <s-table-cell>
+                      <IssuesSummary issues={item.issues} locked={item.locked} />
+                    </s-table-cell>
+                    <s-table-cell>
+                      {item.locked ? (
+                        <s-button
+                          variant="tertiary"
+                          command="--show"
+                          commandFor="upgrade-modal"
+                        >
+                          Desbloquear
+                        </s-button>
+                      ) : (
+                        <s-button
+                          variant="tertiary"
+                          href={`/app/products/${gidToNumericId(item.productId)}`}
+                        >
+                          Ver detalle
+                        </s-button>
+                      )}
+                    </s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
+          )}
+        </s-stack>
+      </s-section>
+
+      <s-modal
+        id="upgrade-modal"
+        heading="Mejora a Pro para desbloquear más productos"
+      >
+        <s-paragraph>
+          El plan Free analiza los primeros {planLimit} productos de tu tienda.
+          Con el plan Pro analizamos todos sin límite y desbloqueas el bulk fix
+          de alt texts.
+        </s-paragraph>
+        <s-button
+          slot="primaryAction"
+          variant="primary"
+          command="--hide"
+          commandFor="upgrade-modal"
+        >
+          Próximamente
+        </s-button>
+        <s-button
+          slot="secondaryActions"
+          command="--hide"
+          commandFor="upgrade-modal"
+        >
+          Cerrar
+        </s-button>
+      </s-modal>
+    </s-page>
+  );
+}
+
+/* eslint-disable react/prop-types */
+function ScoreBadge({ score, locked }) {
+  if (locked) return <s-badge tone="neutral">Bloqueado</s-badge>;
+  let tone = "critical";
+  if (score >= 80) tone = "success";
+  else if (score >= 50) tone = "caution";
+  return <s-badge tone={tone}>{score}</s-badge>;
+}
+
+function IssuesSummary({ issues, locked }) {
+  if (locked) return <s-text tone="subdued">—</s-text>;
+  if (issues.length === 0) return <s-text tone="subdued">Sin issues</s-text>;
+  const counts = { high: 0, medium: 0, low: 0 };
+  for (const i of issues) counts[i.impact]++;
+  const parts = [];
+  if (counts.high) parts.push(`${counts.high} crítico${counts.high === 1 ? "" : "s"}`);
+  if (counts.medium) parts.push(`${counts.medium} medio${counts.medium === 1 ? "" : "s"}`);
+  if (counts.low) parts.push(`${counts.low} bajo${counts.low === 1 ? "" : "s"}`);
+  return <s-text>{parts.join(" · ")}</s-text>;
+}
+/* eslint-enable react/prop-types */
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
