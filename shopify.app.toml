@@ -10,11 +10,14 @@ automatically_update_urls_on_dev = true
 include_config_on_deploy = true
 
 [webhooks]
-api_version = "2026-07"
+api_version = "2026-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products"
+# read_products  → leer productos, imágenes y campos SEO (core del análisis)
+# read_content   → leer páginas y colecciones (análisis extendido en plan Pro)
+# write_products → bulk fix de alt texts (solo plan Pro)
+scopes = "read_products,read_content,write_products"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]

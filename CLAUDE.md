@@ -20,25 +20,30 @@ El plan es en tres fases:
 
 | Capa | Tecnología | Notas |
 |------|-----------|-------|
-| Framework | **Remix** | Scaffold generado con `shopify app init` |
-| Runtime | Node.js 20+ | |
-| UI | **Shopify Polaris** + App Bridge React | Obligatorio para pasar el review |
+| Framework | **React Router v7** | Scaffold actual de `shopify app init` (ya no es Remix) |
+| Runtime | Node.js 20+ | `>=20.19 <22 \|\| >=22.12` |
+| UI | **Polaris Web Components** + App Bridge React | Custom elements `<s-page>`, `<s-button>`, etc. — sin necesidad de instalar `@shopify/polaris` |
 | Base de datos | **Prisma + SQLite** (dev) / **PostgreSQL** (prod) | |
 | Deploy | **Railway** | ~$10/mes, auto-deploy desde GitHub |
-| API Shopify | **GraphQL Admin API 2026-04** | REST está deprecada — NO usar |
+| API Shopify | **GraphQL Admin API 2026-04** | REST está deprecada — NO usar (es la última versión expuesta por el SDK instalado) |
 | Pagos | **Shopify Billing API** | RecurringApplicationCharge |
 | Autenticación | OAuth 2.0 via App Bridge | Ya incluido en el scaffold |
 
-### Dependencias clave
+### Dependencias clave (instaladas por el scaffold)
 ```json
 {
-  "@shopify/shopify-app-remix": "latest",
-  "@shopify/polaris": "latest",
-  "@shopify/app-bridge-react": "latest",
-  "@prisma/client": "latest",
-  "prisma": "latest"
+  "@shopify/shopify-app-react-router": "^1.1.0",
+  "@shopify/shopify-app-session-storage-prisma": "^9.0.0",
+  "@shopify/app-bridge-react": "^4.2.4",
+  "@shopify/polaris-types": "1.0.1",
+  "@react-router/dev": "^7.12.0",
+  "@react-router/serve": "^7.12.0",
+  "@prisma/client": "^6.16.3",
+  "prisma": "^6.16.3"
 }
 ```
+
+> Nota: la UI usa **Polaris Web Components** (custom elements del navegador), no la lib React `@shopify/polaris`. `@shopify/polaris-types` solo aporta tipado para los `s-*` elements.
 
 ---
 
@@ -345,7 +350,8 @@ Documentación técnica:
 
 - JavaScript (no TypeScript por ahora — simplificar el MVP)
 - Componentes React funcionales con hooks
-- Polaris para TODO lo visual dentro del admin — sin CSS custom salvo casos muy específicos
+- **Polaris Web Components** (`<s-page>`, `<s-section>`, `<s-button>`, `<s-stack>`, `<s-text>`, `<s-link>`, `<s-box>`, `<s-unordered-list>`, etc.) para TODO lo visual dentro del admin — sin CSS custom salvo casos muy específicos
+- Loaders/actions de **React Router v7** (`export const loader`, `export const action`) — equivalentes a los de Remix
 - Lógica de negocio (scoring) en `app/services/` — funciones puras, fáciles de testear
 - Queries GraphQL en `app/services/shopify-api.js` — separadas del UI
 - Comentarios en español — es el idioma del desarrollador
