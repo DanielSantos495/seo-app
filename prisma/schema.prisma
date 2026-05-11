@@ -32,3 +32,13 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+// Cache del último análisis SEO completo por tienda.
+// `data` guarda el JSON serializado (SQLite no soporta el tipo Json nativo;
+// al migrar a PostgreSQL en prod podemos cambiarlo a `Json`).
+model SeoCache {
+  id        String   @id @default(cuid())
+  shop      String   @unique
+  data      String
+  updatedAt DateTime @updatedAt
+}
