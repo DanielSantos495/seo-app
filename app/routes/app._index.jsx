@@ -14,6 +14,7 @@ import {
 } from "../services/seo-cache";
 import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
+import { buildCsv } from "../services/csv-export";
 
 export const loader = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
@@ -54,6 +55,9 @@ export const loader = async ({ request }) => {
     planLimit: FREE_PLAN_PRODUCT_LIMIT,
     analyzedAt: cached.analyzedAt.toISOString(),
     isPro,
+    // Items completos (no-locked) para el export CSV client-side.
+    exportItems: cached.items.filter((i) => !i.locked),
+    shopHandle: session.shop.replace(/\.myshopify\.com$/, ""),
   };
 };
 
@@ -74,9 +78,32 @@ function formatRelativeTime(isoDate) {
   return `hace ${days} d`;
 }
 
+function downloadCsv(items, shopHandle) {
+  const csv = buildCsv(items);
+  // BOM U+FEFF para que Excel detecte UTF-8 (acentos, ñ).
+  const blob = new Blob(["﻿", csv], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `seo-report-${shopHandle}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function Index() {
-  const { report, worstProducts, planLimit, analyzedAt, isPro } =
-    useLoaderData();
+  const {
+    report,
+    worstProducts,
+    planLimit,
+    analyzedAt,
+    isPro,
+    exportItems,
+    shopHandle,
+  } = useLoaderData();
   // Preservar los query params de Shopify (host, embedded, id_token...) en el
   // link al upgrade. Importante: el upgrade va por GET con full-page reload
   // (`target="_top"`) para evitar el bug de single-fetch + billing.request.
@@ -134,6 +161,22 @@ export default function Index() {
                 Re-analizar ahora
               </s-button>
             </Form>
+            {isPro ? (
+              <s-button
+                variant="secondary"
+                onClick={() => downloadCsv(exportItems, shopHandle)}
+              >
+                Exportar CSV
+              </s-button>
+            ) : (
+              <s-button
+                href={upgradeUrl}
+                target="_top"
+                variant="secondary"
+              >
+                Pro: exportar CSV
+              </s-button>
+            )}
           </s-stack>
         </s-stack>
       </s-section>

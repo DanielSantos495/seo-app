@@ -20,3 +20,10 @@ export const loader = async ({ request }) => {
   // billing.request lanza redirect; defensivo.
   return null;
 };
+
+// Defensivo: si por algún motivo el loader no redirige y React Router intenta
+// renderizar el componente, devolvemos null en lugar de undefined para evitar
+// que se serialice como objeto.
+export default function Upgrade() {
+  return null;
+}

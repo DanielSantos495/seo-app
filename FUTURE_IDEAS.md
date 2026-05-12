@@ -22,12 +22,6 @@ Backlog de mejoras que descartamos o pospusimos durante el MVP. Anotar acá cual
 
 ---
 
-## Vista global de issues agrupados
-
-Ruta `/app/issues` con todos los issues agregados por tipo (ej: "30 productos sin meta title", "12 productos con descripción corta"). Cada grupo lista los productos afectados con link al detalle. Ya está en el plan original — pendiente.
-
----
-
 ## Bulk fix masivo escalable (>50 productos)
 
 Hoy hay bulk masivo desde el listado pero con **cap de 50 productos por ejecución** (Fase A). Para tiendas grandes que tengan >500 productos con issues:
@@ -45,12 +39,6 @@ Generar meta descriptions con Claude desde el detalle del producto. Mismo patró
 
 ---
 
-## Webhook `app_subscriptions/update` para invalidar cache
-
-Hoy confiamos en el TTL del cache (1h) + el cache key incluyendo el plan. Suscribirse a este webhook invalida instantáneamente al cambiar/cancelar plan.
-
----
-
 ## Migración a Managed App Pricing
 
 Eliminar Billing API custom y usar la página de planes hosteada por Shopify. Más simple, evita el bug de single-fetch + billing.request, default para apps nuevas. Detalle en `PRODUCTION_NOTES.md`.
@@ -63,15 +51,20 @@ Mismo flujo que productos: fetch + analyzer + IssuesList. Reusar el componente `
 
 ---
 
-## Sidekick App Extension (V3)
+## Análisis del HTML de las páginas: product, home, collections
 
-Exponer acciones tipo "¿Cuál es mi producto con peor SEO?" desde el chat nativo de Shopify. Requiere publicar la app, conseguir tracción real, y solicitar acceso al preview. Detallado en `CLAUDE.md` sección "Objetivo a largo plazo".
+La App tiene que leer en HTML y analizar el uso correcto de headings comparando con el contenido. Ejemplo:
+- Home: La primera sección debería tener el H1, no haber ningún otro h1 en esa página y ver que las demás secciones tengan correctamente un h2, h3, etc. Plan Pro.
+- Product page: El H1 debe ser correspondiente al tíulo del producto y/o similar, debe estar en la primera sección de la página.
+- Elementos HTML: Headings OK, button OK, a (anchor) OK, ul, ol, etc. Cada elemento con sus correspondientes atributos.
+- Etc.
 
 ---
 
-## Export CSV del reporte
 
-Plan Pro. Botón "Exportar reporte" que descarga un CSV con productId, título, score, lista de issues. Simple de implementar; útil para merchants que quieren compartir el análisis con su equipo.
+## Sidekick App Extension (V3)
+
+Exponer acciones tipo "¿Cuál es mi producto con peor SEO?" desde el chat nativo de Shopify. Requiere publicar la app, conseguir tracción real, y solicitar acceso al preview. Detallado en `CLAUDE.md` sección "Objetivo a largo plazo".
 
 ---
 

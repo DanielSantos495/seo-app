@@ -27,7 +27,31 @@ export default function App() {
 
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+
+  // Fallback legible cuando el `boundary.error` del SDK no logra renderizar
+  // el error (típico cuando la sesión tiene scopes viejos → 403 al validar).
+  if (error?.status === 403) {
+    return (
+      <s-page heading="Reinstalación requerida">
+        <s-section>
+          <s-banner tone="critical" heading="Sesión inválida">
+            <s-paragraph>
+              Los permisos de la app cambiaron. Necesitamos que reinstales
+              la app para seguir.
+            </s-paragraph>
+            <s-paragraph>
+              Andá al admin de tu tienda → Settings → Apps → desinstalá esta
+              app y volvé a abrirla desde el listado para aceptar los
+              permisos nuevos.
+            </s-paragraph>
+          </s-banner>
+        </s-section>
+      </s-page>
+    );
+  }
+
+  return boundary.error(error);
 }
 
 export const headers = (headersArgs) => {

@@ -33,6 +33,18 @@ Lista viva de cosas que hay que cambiar / configurar antes de salir a App Store 
 - La app debe estar en **Public Distribution** para que la Billing API funcione. Sin esto el SDK responde "Apps without a public distribution cannot use the Billing API".
 - Activar en: Partners → Apps → tu app → Distribution → "Distribute through the Shopify App Store". No publica la app, solo habilita las APIs.
 
+### Troubleshooting: app renderiza `[object Object]` tras cambio de scopes
+
+Si después de actualizar `scopes` en `shopify.app.toml` la app muestra solo `[object Object]` en el body:
+
+- Causa: la sesión vieja tiene un access token con scopes obsoletos. `authenticate.admin` valida internamente con Shopify y recibe `403 Forbidden ("GraphQL Client: Forbidden")`. El `boundary.error` del SDK no logra renderizar ese error y termina como `[object Object]`.
+- Fix: borrar la sesión y forzar reinstalación.
+  ```bash
+  sqlite3 prisma/dev.sqlite "DELETE FROM Session; DELETE FROM SeoCache;"
+  ```
+  En prod (Postgres): `DELETE FROM "Session"; DELETE FROM "SeoCache";`
+- Mitigación: el `ErrorBoundary` en `app/routes/app.jsx` detecta status 403 y muestra un mensaje accionable ("Reinstalación requerida") con instrucciones para el merchant en lugar del crudo `[object Object]`.
+
 ### Bug conocido: 401 con single-fetch + `<Form>` POST
 
 - React Router 7 usa **single fetch** por default. Si invocás `billing.request()` desde un `action` disparado por `<Form method="post">`, el redirect 302 que el SDK emite se trunca a 401 en el cliente. Bug confirmado en [shopify-app-js#1976](https://github.com/Shopify/shopify-app-js/issues/1976).

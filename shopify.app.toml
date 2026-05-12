@@ -25,6 +25,11 @@ api_version = "2026-04"
   compliance_topics = [ "shop/redact" ]
   uri = "/webhooks/shop/redact"
 
+  # Cambios de suscripción del plan Pro (activación, cancelación, fin de trial).
+  [[webhooks.subscriptions]]
+  topics = [ "app_subscriptions/update" ]
+  uri = "/webhooks/app/subscriptions_update"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # read_products  → leer productos, imágenes y campos SEO (core del análisis)
