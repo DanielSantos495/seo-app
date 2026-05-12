@@ -139,25 +139,28 @@ export default function Index() {
       </s-section>
 
       <s-section heading="Issues encontrados">
-        <s-stack direction="inline" gap="large">
-          {[
-            { label: "Críticos", count: report.issuesByImpact.high, tone: "critical" },
-            { label: "Medios", count: report.issuesByImpact.medium, tone: "caution" },
-            { label: "Bajos", count: report.issuesByImpact.low, tone: "info" },
-          ].map(({ label, count, tone }) => (
-            <s-box
-              key={label}
-              padding="base"
-              borderWidth="base"
-              borderRadius="base"
-              background="subdued"
-            >
-              <s-stack direction="block" gap="tight" alignment="center">
-                <s-heading>{count}</s-heading>
-                <s-text tone={tone}>{label}</s-text>
-              </s-stack>
-            </s-box>
-          ))}
+        <s-stack direction="block" gap="base">
+          <s-stack direction="inline" gap="large">
+            {[
+              { label: "Críticos", count: report.issuesByImpact.high, tone: "critical" },
+              { label: "Medios", count: report.issuesByImpact.medium, tone: "caution" },
+              { label: "Bajos", count: report.issuesByImpact.low, tone: "info" },
+            ].map(({ label, count, tone }) => (
+              <s-box
+                key={label}
+                padding="base"
+                borderWidth="base"
+                borderRadius="base"
+                background="subdued"
+              >
+                <s-stack direction="block" gap="tight" alignment="center">
+                  <s-heading>{count}</s-heading>
+                  <s-text tone={tone}>{label}</s-text>
+                </s-stack>
+              </s-box>
+            ))}
+          </s-stack>
+          <s-button href="/app/issues">Ver issues agrupados por tipo</s-button>
         </s-stack>
       </s-section>
 
