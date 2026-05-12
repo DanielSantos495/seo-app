@@ -1,16 +1,40 @@
-import { useMemo, useState } from "react";
-import { useLoaderData, useLocation } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Form,
+  useActionData,
+  useLoaderData,
+  useLocation,
+  useNavigation,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { fetchAllProducts } from "../services/shopify-api";
+import {
+  bulkFixAltTextsForProducts,
+  fetchAllProducts,
+  previewAltTextsForProducts,
+} from "../services/shopify-api";
 import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
 import {
   buildItemsFromProducts,
   getCachedItems,
+  invalidateCache,
   setCachedItems,
 } from "../services/seo-cache";
 import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
+
+const BULK_CAP = 50;
+
+function getEligibleGids(items) {
+  return items
+    .filter(
+      (i) =>
+        !i.locked &&
+        i.issues?.some((iss) => iss.field === "images.altText"),
+    )
+    .map((i) => i.productId);
+}
 
 export const loader = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
@@ -28,12 +52,55 @@ export const loader = async ({ request }) => {
     cached = { items, analyzedAt: new Date() };
   }
 
+  const eligibleGids = getEligibleGids(cached.items);
+  let samples = [];
+  if (eligibleGids.length > 0) {
+    samples = await previewAltTextsForProducts(
+      admin,
+      eligibleGids.slice(0, BULK_CAP),
+      { limit: 3 },
+    );
+  }
+
   return {
     items: cached.items,
     planLimit: FREE_PLAN_PRODUCT_LIMIT,
     analyzedAt: cached.analyzedAt.toISOString(),
     isPro,
+    bulkFix: {
+      eligible: eligibleGids.length,
+      processable: Math.min(eligibleGids.length, BULK_CAP),
+      exceedsCap: eligibleGids.length > BULK_CAP,
+      samples,
+    },
   };
+};
+
+export const action = async ({ request }) => {
+  const { admin, session, billing } = await authenticate.admin(request);
+
+  const isPro = await checkIsPro(billing);
+  if (!isPro) {
+    return new Response(
+      JSON.stringify({ error: "Esta acción es solo para plan Pro" }),
+      { status: 403, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // Recalcular elegibles con data fresca — no confiamos en lo que vino del cliente.
+  const cached = await getCachedItems(session.shop, "pro");
+  if (!cached) {
+    return { ok: false, error: "Cache no disponible. Recargá la página." };
+  }
+  const eligibleGids = getEligibleGids(cached.items).slice(0, BULK_CAP);
+  if (eligibleGids.length === 0) {
+    return { ok: true, totalProducts: 0, totalImages: 0, errors: [] };
+  }
+
+  const result = await bulkFixAltTextsForProducts(admin, eligibleGids);
+  await invalidateCache(session.shop);
+
+  return { ok: true, ...result };
 };
 
 function formatRelativeTime(isoDate) {
@@ -55,11 +122,33 @@ const SORT_OPTIONS = [
 ];
 
 export default function Products() {
-  const { items, planLimit, analyzedAt, isPro } = useLoaderData();
+  const { items, planLimit, analyzedAt, isPro, bulkFix } = useLoaderData();
+  const actionData = useActionData();
+  const navigation = useNavigation();
+  const shopify = useAppBridge();
   // Upgrade va por GET con full-page reload (`target="_top"`) para evitar el bug
   // de single-fetch + billing.request. Conservamos los query params de Shopify.
   const location = useLocation();
   const upgradeUrl = `/app/upgrade${location.search}`;
+  const isApplying = navigation.state === "submitting";
+
+  useEffect(() => {
+    if (!actionData) return;
+    if (actionData.error) {
+      shopify.toast.show(`Error: ${actionData.error}`, { isError: true });
+      return;
+    }
+    if (actionData.totalImages === 0) {
+      shopify.toast.show("No había alt texts para agregar");
+      return;
+    }
+    const errCount = actionData.errors?.length || 0;
+    const okCount = actionData.totalProducts - errCount;
+    shopify.toast.show(
+      `Listo: ${okCount} producto${okCount === 1 ? "" : "s"} · ${actionData.totalImages} alt text${actionData.totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
+      errCount ? { isError: true } : undefined,
+    );
+  }, [actionData, shopify]);
 
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState("worst");
@@ -145,6 +234,17 @@ export default function Products() {
                 </s-option>
               ))}
             </s-select>
+            {bulkFix.eligible > 0 && (
+              <s-button
+                variant="primary"
+                command="--show"
+                commandFor={isPro ? "bulk-alt-modal" : "upgrade-modal"}
+              >
+                {isPro
+                  ? `Arreglar alt texts (${bulkFix.processable})`
+                  : `Pro: arreglar alt texts (${bulkFix.eligible})`}
+              </s-button>
+            )}
           </s-stack>
 
           {displayed.length === 0 ? (
@@ -212,6 +312,55 @@ export default function Products() {
           )}
         </s-stack>
       </s-section>
+
+      {isPro && bulkFix.eligible > 0 && (
+        <s-modal
+          id="bulk-alt-modal"
+          heading="Arreglar alt texts en lote"
+        >
+          <s-paragraph>
+            Vamos a procesar <s-text>{bulkFix.processable}</s-text> producto
+            {bulkFix.processable === 1 ? "" : "s"} y agregar alt text a sus
+            imágenes faltantes.
+          </s-paragraph>
+          {bulkFix.exceedsCap && (
+            <s-banner tone="info">
+              <s-paragraph>
+                Tu tienda tiene {bulkFix.eligible} productos elegibles.
+                Procesaremos los primeros {BULK_CAP}; volvé a ejecutar para
+                el resto.
+              </s-paragraph>
+            </s-banner>
+          )}
+          {bulkFix.samples.length > 0 && (
+            <s-stack direction="block" gap="tight">
+              <s-text tone="subdued">Ejemplos del patrón:</s-text>
+              {bulkFix.samples.map((s, idx) => (
+                <s-text key={idx}>
+                  {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
+                </s-text>
+              ))}
+            </s-stack>
+          )}
+          <Form method="post" slot="primaryAction">
+            <s-button
+              type="submit"
+              variant="primary"
+              {...(isApplying ? { loading: true } : {})}
+            >
+              Aplicar a {bulkFix.processable} producto
+              {bulkFix.processable === 1 ? "" : "s"}
+            </s-button>
+          </Form>
+          <s-button
+            slot="secondaryActions"
+            command="--hide"
+            commandFor="bulk-alt-modal"
+          >
+            Cancelar
+          </s-button>
+        </s-modal>
+      )}
 
       <s-modal
         id="upgrade-modal"

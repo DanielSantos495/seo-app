@@ -150,6 +150,63 @@ function normalizeProduct(node) {
   };
 }
 
+// Genera el preview del bulk: para los primeros `limit` productos, fetchea
+// y corre el generador para mostrar ejemplos representativos en el modal.
+// Importa `generateAltTexts` perezoso para evitar circular import en algunos bundlers.
+export async function previewAltTextsForProducts(
+  admin,
+  productGids,
+  { limit = 3 } = {},
+) {
+  const { generateAltTexts } = await import("./alt-text-generator");
+  const samples = [];
+  for (const gid of productGids.slice(0, limit)) {
+    const product = await fetchProductById(admin, gid);
+    if (!product) continue;
+    const alts = generateAltTexts(product);
+    if (alts.size === 0) continue;
+    const firstAlt = alts.values().next().value;
+    samples.push({ productTitle: product.title, sampleAlt: firstAlt });
+  }
+  return samples;
+}
+
+// Bulk fix secuencial con throttle suave para no quemar el rate limit GraphQL
+// (~50 puntos/seg en Standard plan; ~40 puntos por producto).
+const BULK_THROTTLE_MS = 800;
+
+export async function bulkFixAltTextsForProducts(admin, productGids) {
+  const { generateAltTexts } = await import("./alt-text-generator");
+  let totalImages = 0;
+  const errors = [];
+
+  for (let i = 0; i < productGids.length; i++) {
+    const gid = productGids[i];
+    try {
+      const product = await fetchProductById(admin, gid);
+      if (!product) continue;
+      const alts = generateAltTexts(product);
+      if (alts.size === 0) continue;
+      const result = await updateProductAltTexts(admin, gid, alts);
+      if (result.ok) {
+        totalImages += alts.size;
+      } else {
+        errors.push({
+          productId: gid,
+          message: result.userErrors.map((e) => e.message).join("; "),
+        });
+      }
+    } catch (e) {
+      errors.push({ productId: gid, message: e.message });
+    }
+    if (i < productGids.length - 1) {
+      await new Promise((r) => setTimeout(r, BULK_THROTTLE_MS));
+    }
+  }
+
+  return { totalProducts: productGids.length, totalImages, errors };
+}
+
 // Aplica nuevos alt texts a un producto vía `productUpdateMedia`.
 // `altTextsByImageId` es un Map o objeto { mediaId: newAltText }.
 // Devuelve { ok, userErrors }.

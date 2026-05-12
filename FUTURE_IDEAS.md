@@ -28,9 +28,14 @@ Ruta `/app/issues` con todos los issues agregados por tipo (ej: "30 productos si
 
 ---
 
-## Bulk fix masivo desde el listado
+## Bulk fix masivo escalable (>50 productos)
 
-Hoy el bulk fix de alt texts opera sobre 1 producto. Versión masiva (todos los productos con issue de alt) requiere paginar mutaciones por rate limits de la GraphQL API. Patrón: cola con `setTimeout`/server action que procesa N por minuto.
+Hoy hay bulk masivo desde el listado pero con **cap de 50 productos por ejecución** (Fase A). Para tiendas grandes que tengan >500 productos con issues:
+
+- **Fase B**: background job con tabla `AltFixJob (shop, total, processed, status, errors[])`, cliente hace polling cada 2s. Sin cap. Mucho código nuevo (estado, retries, race conditions).
+- **Fase C**: usar `bulkOperationRunMutation` de Shopify. Subimos un JSONL con todas las mutations, Shopify procesa en su lado sin rate limits nuestros, webhook `bulk_operations/finish` notifica al terminar. Sin preview antes de aplicar.
+
+Trigger para implementar: cuando 5+ merchants pidan procesar tiendas grandes en una sola ejecución.
 
 ---
 
