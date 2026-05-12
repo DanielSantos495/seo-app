@@ -1,6 +1,6 @@
 # CLAUDE.md — Shopify SEO Analyzer
 > Contexto completo del proyecto para Claude Code.
-> Última actualización: Mayo 2026
+> Última actualización: 2026-05-12 (MVP funcional cerrado; pendiente deploy + listing)
 
 ---
 
@@ -13,6 +13,35 @@ El plan es en tres fases:
 1. **V1 MVP** — SEO Analyzer funcional, publicado en el App Store
 2. **V2** — Agregar AI Description Generator como feature premium
 3. **V3** — Integrar Sidekick App Extension (el objetivo a largo plazo)
+
+---
+
+## 📊 Estado actual (Mayo 2026)
+
+**MVP funcional completo**. El código cubre el flow end-to-end (install → análisis → upgrade Pro → bulk fix → export). Quedan tareas operativas para llegar al App Store (deploy, listing, legal).
+
+### Implementado
+- [x] OAuth + sesión con React Router v7 + Prisma session storage
+- [x] Schema Prisma: `Session`, `SeoCache` (cache con TTL 1h + plan-key)
+- [x] Servicios: `seo-analyzer`, `shopify-api`, `seo-cache`, `billing`, `alt-text-generator`, `csv-export`, `admin-links`, `issue-labels`
+- [x] Dashboard (`/app`) con score general, top 5 peores productos, CTA re-analizar, export CSV
+- [x] Listado de productos (`/app/products`) con search, sort, bulk fix masivo (cap 50)
+- [x] Detalle de producto (`/app/products/:id`) con `IssuesList`, bulk fix por producto
+- [x] Vista global de issues agrupados por tipo (`/app/issues`) con expand
+- [x] Billing API: plan Pro $9/mes + 7 días trial + flow de upgrade (con workaround del bug single-fetch documentado en `PRODUCTION_NOTES.md`)
+- [x] 3 webhooks GDPR + `app_subscriptions/update` (invalida cache al cambiar plan)
+- [x] `ErrorBoundary` con mensaje accionable para 403 (sesión con scopes obsoletos)
+- [x] Export CSV client-side (Pro) con BOM UTF-8 para Excel
+
+### Pendiente para release al App Store
+- [ ] Deploy a Railway/Vercel con Postgres + `BILLING_TEST=false`
+- [ ] Privacy Policy + Terms of Service publicados
+- [ ] Screenshots (1280×800, mín 3) + video demo (30–60s)
+- [ ] Email de soporte visible en app y listing
+- [ ] QA end-to-end en dev store fresca (install/uninstall/reinstall)
+
+> Notas operativas y troubleshooting de producción: ver `PRODUCTION_NOTES.md`.
+> Backlog de mejoras post-MVP: ver `FUTURE_IDEAS.md`.
 
 ---
 
@@ -50,27 +79,41 @@ El plan es en tres fases:
 ## 📁 Estructura del proyecto
 
 ```
-seo-analyzer/
+seo-app/
 ├── app/
 │   ├── routes/
-│   │   ├── app._index.jsx        ← Dashboard principal (score general)
-│   │   ├── app.products.jsx      ← Tabla de todos los productos con scores
-│   │   ├── app.issues.jsx        ← Lista de issues priorizados con fixes
-│   │   └── webhooks.jsx          ← GDPR webhooks (obligatorios)
+│   │   ├── app.jsx                            ← Layout embebido + nav (Dashboard / Productos / Issues)
+│   │   ├── app._index.jsx                     ← Dashboard: score general + top 5 + CSV export
+│   │   ├── app.products.jsx                   ← Listado con search/sort + bulk fix masivo cap 50
+│   │   ├── app.products_.$id.jsx              ← Detalle + bulk fix por producto (`_` opt-out de nesting)
+│   │   ├── app.issues.jsx                     ← Vista global de issues agrupados por tipo
+│   │   ├── app.upgrade.jsx                    ← Loader que dispara billing.request (workaround single-fetch)
+│   │   ├── webhooks.customers.data_request.jsx
+│   │   ├── webhooks.customers.redact.jsx
+│   │   ├── webhooks.shop.redact.jsx           ← Borra session + seoCache del shop
+│   │   ├── webhooks.app.uninstalled.jsx
+│   │   ├── webhooks.app.scopes_update.jsx
+│   │   └── webhooks.app.subscriptions_update.jsx ← Invalida cache al cambiar plan
 │   ├── services/
-│   │   ├── seo-analyzer.js       ← Lógica de scoring (función pura)
-│   │   └── shopify-api.js        ← Queries GraphQL a la Admin API
+│   │   ├── seo-analyzer.js                    ← Scoring puro + `aggregateAnalyses` + `FREE_PLAN_PRODUCT_LIMIT`
+│   │   ├── shopify-api.js                     ← Queries/mutations GraphQL + helpers
+│   │   ├── seo-cache.js                       ← Cache TTL 1h con plan-key + `buildItemsFromProducts`
+│   │   ├── billing.js                         ← `checkIsPro`, `BILLING_IS_TEST`
+│   │   ├── alt-text-generator.js              ← Naive con variantes (sin IA)
+│   │   ├── csv-export.js                      ← `buildCsv`, `escapeCell` (RFC 4180)
+│   │   ├── admin-links.js                     ← Deep links `shopify://admin/products/{id}`
+│   │   └── issue-labels.js                    ← Mapeo `field` → label humano + `mostSevere`
 │   ├── components/
-│   │   ├── ScoreCard.jsx         ← Componente de score circular
-│   │   ├── IssuesBadge.jsx       ← Badge de impacto (high/medium/low)
-│   │   └── ProductsTable.jsx     ← IndexTable de productos con scores
-│   ├── shopify.server.js         ← Config auth + billing (generado por CLI)
-│   └── db.server.js              ← Cliente Prisma singleton
+│   │   └── IssuesList.jsx                     ← Lista reutilizable de issues con CTA al admin
+│   ├── shopify.server.js                      ← Config auth + billing (Pro Plan $9/mes)
+│   └── db.server.js                           ← Prisma singleton
 ├── prisma/
-│   └── schema.prisma             ← Session + SeoCache models
-├── public/
-├── shopify.app.toml              ← Config de la app (scopes, webhooks)
-└── CLAUDE.md                     ← Este archivo
+│   ├── schema.prisma                          ← Session + SeoCache models
+│   └── migrations/                            ← `add_seo_cache` aplicado
+├── shopify.app.toml                           ← Config app + 4 webhooks declarados
+├── CLAUDE.md                                  ← Este archivo
+├── PRODUCTION_NOTES.md                        ← Checklist + troubleshooting para release
+└── FUTURE_IDEAS.md                            ← Backlog post-MVP
 ```
 
 ---
@@ -78,33 +121,46 @@ seo-analyzer/
 ## 🗄️ Schema de Prisma
 
 ```prisma
-// prisma/schema.prisma
+// prisma/schema.prisma — schema real
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"           // Cambiar a "postgresql" en producción
-  url      = env("DATABASE_URL")
+  provider = "sqlite"           // Cambiar a "postgresql" en prod
+  url      = "file:dev.sqlite"
 }
 
 model Session {
-  id          String   @id
-  shop        String
-  state       String
-  isOnline    Boolean  @default(false)
-  scope       String?
-  expires     DateTime?
-  accessToken String
-  userId      BigInt?
-  createdAt   DateTime @default(now())
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
 }
 
+// Cache del análisis completo por tienda. `data` es JSON serializado
+// (SQLite no soporta el tipo Json nativo; al migrar a Postgres podemos
+// cambiarlo a `Json`). El JSON guardado tiene la forma:
+//   { plan: "free" | "pro", items: [{ productId, title, score, issues, ... }] }
+// El cache se invalida si el plan cambia (key incluye el plan).
 model SeoCache {
   id        String   @id @default(cuid())
   shop      String   @unique
-  data      Json     // Resultado del último análisis completo
+  data      String
   updatedAt DateTime @updatedAt
 }
 ```
@@ -135,19 +191,23 @@ Cada producto recibe un score de **0 a 100** basado en estos criterios:
 ## 📊 Features por plan
 
 ### Plan Free (freemium — para instalaciones fáciles)
-- Análisis de los primeros **25 productos**
-- Dashboard con score general
+- Análisis de los primeros **N productos** (configurable en `FREE_PLAN_PRODUCT_LIMIT` de `app/services/seo-analyzer.js`; hoy `10` para testing, target final `25`)
+- Dashboard con score general + top 5 peores
+- Vista global de issues agrupados por tipo
 - Lista de issues con descripción del fix
-- Sin bulk actions
+- Sin bulk actions ni export CSV
 
 ### Plan Pro — $9/mes
 - Análisis de **todos los productos** (sin límite)
-- **Bulk fix de alt texts** (genera alt text automáticamente con el nombre del producto)
-- Export de reporte en CSV
-- Análisis de colecciones y páginas
+- **Bulk fix de alt texts** — naive con variantes (`${title} - ${variant}` o `${title} - vista N`)
+  - Por producto en el detalle
+  - Masivo desde el listado (cap 50 por ejecución; trigger para Fase B con job background en `FUTURE_IDEAS.md`)
+- **Export CSV** del reporte completo (client-side, con BOM UTF-8 para Excel)
 
 ### V2 — Plan Pro+ (futuro, no en MVP)
 - **AI Description Generator** — genera meta descriptions con Claude API
+- **Alt text con Claude Vision** — toggle "Mejorar con IA" en el bulk fix
+- Análisis de páginas y colecciones
 - Sugerencias de keywords por producto
 - Integración con Google Search Console (si es posible via API)
 
@@ -171,123 +231,142 @@ scopes = "read_products,read_content,write_products"
 
 ## 📡 GraphQL Queries principales
 
-### Traer productos con campos SEO
+> ⚠️ En API 2026-04 las imágenes viven bajo `media` (modelo unificado con videos/3D), **no** bajo el viejo `images` (que sigue funcionando en lectura pero **no en `ProductInput` para mutaciones**).
+
+### Traer productos con campos SEO (lectura)
 ```graphql
-query GetProductsSeo($cursor: String) {
-  products(first: 50, after: $cursor) {
-    pageInfo {
-      hasNextPage
-      endCursor
-    }
-    edges {
-      node {
-        id
-        title
-        handle
-        descriptionHtml
-        seo {
-          title
-          description
-        }
-        images(first: 10) {
-          edges {
-            node {
-              id
-              altText
-              url
-            }
+query GetProductSeo($id: ID!) {
+  product(id: $id) {
+    id
+    title
+    handle
+    descriptionHtml
+    seo { title description }
+    media(first: 50) {
+      edges {
+        node {
+          id
+          alt
+          mediaContentType
+          ... on MediaImage {
+            image { url }
           }
         }
       }
     }
-  }
-}
-```
-
-### Mutation para actualizar alt text (bulk fix)
-```graphql
-mutation UpdateProductImages($input: ProductInput!) {
-  productUpdate(input: $input) {
-    product {
-      id
-      images(first: 10) {
-        edges {
-          node { id altText }
+    variants(first: 100) {
+      edges {
+        node {
+          id
+          title
+          media(first: 1) { edges { node { id } } }
         }
       }
     }
-    userErrors {
-      field
-      message
-    }
   }
 }
 ```
 
----
+`normalizeProduct` filtra `mediaContentType === "IMAGE"` y expone la shape como `images: [{ id, altText, url }]` para no romper el resto del código.
 
-## 🪝 GDPR Webhooks (obligatorios para el App Store)
-
-Shopify exige estos 3 webhooks o la app es rechazada:
-
-```javascript
-// app/routes/webhooks.jsx
-switch (topic) {
-  case 'CUSTOMERS_DATA_REQUEST':
-    // Esta app no guarda datos de clientes — responder vacío
-    return new Response();
-
-  case 'CUSTOMERS_REDACT':
-    // Igual — no hay datos de clientes que borrar
-    return new Response();
-
-  case 'SHOP_REDACT':
-    // Tienda desinstala — borrar todos sus datos
-    await db.seoCache.deleteMany({ where: { shop } });
-    await db.session.deleteMany({ where: { shop } });
-    return new Response();
+### Mutation para actualizar alt text (bulk fix)
+```graphql
+mutation ProductUpdateMedia($productId: ID!, $media: [UpdateMediaInput!]!) {
+  productUpdateMedia(productId: $productId, media: $media) {
+    media { id alt }
+    mediaUserErrors { field message }
+  }
 }
 ```
 
-Deben declararse en `shopify.app.toml`:
+Cada `UpdateMediaInput` lleva `{ id, alt }` donde `id` es un MediaImage GID (no Image GID).
+
+---
+
+## 🪝 Webhooks
+
+### GDPR (obligatorios para el App Store)
+
+Tres rutas separadas, una por topic:
+- `webhooks.customers.data_request.jsx` → responde 200 vacío (no guardamos datos de clientes)
+- `webhooks.customers.redact.jsx` → responde 200 vacío
+- `webhooks.shop.redact.jsx` → borra `session` + `seoCache` del shop
+
+### Subscription updates (cache invalidation)
+- `webhooks.app.subscriptions_update.jsx` → borra `seoCache` cuando cambia el plan (activación, fin de trial, cancelación). Sin esto, el merchant ve "Plan Pro activo" hasta 1h después de cancelar (TTL del cache).
+
+### Declaración en `shopify.app.toml`
 ```toml
-[[webhooks.subscriptions]]
-topics = ["customers/data_request", "customers/redact", "shop/redact"]
-uri = "/webhooks"
+[webhooks]
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request" ]
+  uri = "/webhooks/customers/data_request"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/redact" ]
+  uri = "/webhooks/customers/redact"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "shop/redact" ]
+  uri = "/webhooks/shop/redact"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app_subscriptions/update" ]
+  uri = "/webhooks/app/subscriptions_update"
 ```
 
 ---
 
 ## 💳 Billing API — Planes de suscripción
 
+Config real en `app/shopify.server.js`:
+
 ```javascript
-// En shopify.server.js, agregar la config de billing:
-export const shopify = shopifyApp({
+import {
+  BillingInterval,
+  shopifyApp,
+} from "@shopify/shopify-app-react-router/server";
+
+export const PRO_PLAN = "Pro Plan";
+
+const shopify = shopifyApp({
   // ...config existente...
   billing: {
-    'Pro Plan': {
-      amount: 9,
-      currencyCode: 'USD',
-      interval: BillingInterval.Every30Days,
-      trialDays: 7,         // 7 días gratis para convertir
+    [PRO_PLAN]: {
+      lineItems: [
+        {
+          amount: 9,
+          currencyCode: "USD",
+          interval: BillingInterval.Every30Days,
+        },
+      ],
+      trialDays: 7,
     },
   },
 });
 ```
 
-**Flujo:** merchant instala → usa plan free → al intentar analizar producto #26 → modal de upgrade → Shopify maneja el cobro → tú recibes el 100% (hasta $1M vitalicio).
+**Flujo:** merchant instala → usa plan free → click "Mejorar a Pro" → loader de `/app/upgrade` dispara `billing.request()` → Shopify maneja el cobro → vuelve a `/app?upgraded=1` → cache invalidado → loader detecta `isPro=true`.
+
+> ⚠️ **Bug conocido**: `billing.request()` retorna 401 si se invoca desde un `action` (POST) por el transporte single-fetch de React Router 7 (issue [shopify-app-js#1976](https://github.com/Shopify/shopify-app-js/issues/1976)). Workaround: invocarlo desde un **loader** GET full-page con `target="_top"` en el botón. Aplicado en `app.upgrade.jsx`. Detalle en `PRODUCTION_NOTES.md`.
+
+> ⚠️ **Public distribution requerida**: la app debe estar marcada como "Public" en el Partner Dashboard (Distribution → "Distribute through Shopify App Store") aunque no esté publicada, sino el SDK responde "Apps without a public distribution cannot use the Billing API".
+
+**Revenue share**: 0% en los primeros $1M USD vitalicios.
 
 ---
 
 ## ✅ Checklist pre-publicación en App Store
 
 ### Técnico (causas más comunes de rechazo)
-- [ ] ⚠️ GDPR webhooks implementados y respondiendo 200 OK
-- [ ] ⚠️ OAuth flow: instalar, desinstalar, RE-instalar funciona correctamente
-- [ ] ⚠️ Billing API implementada (no cobrar fuera del ecosistema Shopify)
-- [ ] UI construida 100% con componentes de Polaris
-- [ ] Scopes mínimos solicitados (no pedir más de lo necesario)
-- [ ] App funciona en una development store real con productos reales
+- [x] GDPR webhooks implementados y respondiendo 200 OK
+- [x] Billing API implementada (no cobrar fuera del ecosistema Shopify)
+- [x] UI construida 100% con Polaris Web Components
+- [x] Scopes mínimos solicitados (`read_products,read_content,write_products`)
+- [ ] OAuth flow: instalar, desinstalar, RE-instalar funciona correctamente (QA pendiente en dev store fresca)
+- [ ] App funciona en una development store real con productos reales (QA pendiente)
 - [ ] Lighthouse score de la tienda no baja más de 10 puntos tras instalar
 - [ ] App desplegada en URL HTTPS (Railway o Vercel)
 
@@ -306,15 +385,15 @@ export const shopify = shopifyApp({
 ## 🚀 Roadmap del proyecto
 
 ```
-Semana 1   → Setup: shopify app init, explorar scaffold, dev store funcionando
-Semana 2   → GraphQL queries + lógica de scoring (seo-analyzer.js)
-Semana 3-4 → UI con Polaris: dashboard, tabla de productos, lista de issues
-Semana 5   → Billing API + planes free/pro
-Semana 6   → GDPR webhooks + support page + QA end-to-end
-Semana 7   → Deploy Railway + listing + enviar a revisión Shopify
-Mes 3-6    → Iterar con feedback, reviews, feature requests
-Mes 6+     → V2: AI Description Generator (Claude API)
-Mes 9-12   → V3: Sidekick App Extension
+✅ Semana 1   → Setup: shopify app init, explorar scaffold, dev store funcionando
+✅ Semana 2   → GraphQL queries + scoring + cache SeoCache
+✅ Semana 3-4 → UI con Polaris WC: dashboard + productos + detalle + issues
+✅ Semana 5   → Billing API + planes free/pro + workaround single-fetch
+✅ Semana 6   → GDPR webhooks + bulk fix alt texts (por producto + masivo) + CSV export
+🚧 Semana 7   → Deploy Railway + listing + enviar a revisión Shopify ← acá estamos
+   Mes 3-6   → Iterar con feedback, reviews, feature requests
+   Mes 6+    → V2: AI Description Generator + Alt text con Claude Vision
+   Mes 9-12  → V3: Sidekick App Extension
 ```
 
 ---
