@@ -1,32 +1,67 @@
-import { useLoaderData } from "react-router";
+import { Form, redirect, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { fetchAllProducts } from "../services/shopify-api";
 import {
-  analyzeProducts,
+  aggregateAnalyses,
   FREE_PLAN_PRODUCT_LIMIT,
 } from "../services/seo-analyzer";
+import {
+  buildItemsFromProducts,
+  getCachedItems,
+  invalidateCache,
+  setCachedItems,
+} from "../services/seo-cache";
 import { gidToNumericId } from "../services/admin-links";
 
 export const loader = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
-  const products = await fetchAllProducts(admin, {
-    limit: FREE_PLAN_PRODUCT_LIMIT,
-  });
-  const report = analyzeProducts(products);
+  let cached = await getCachedItems(session.shop);
+  if (!cached) {
+    const products = await fetchAllProducts(admin);
+    const items = buildItemsFromProducts(products);
+    await setCachedItems(session.shop, items);
+    cached = { items, analyzedAt: new Date() };
+  }
 
-  // Top 5 productos con peor score (excluye 100/100 para no llenar la UI).
+  // Solo los items no-locked tienen scoring. El report del dashboard se calcula
+  // sobre ellos.
+  const unlocked = cached.items.filter((i) => !i.locked);
+  const report = aggregateAnalyses(unlocked);
+
   const worstProducts = [...report.products]
     .filter((p) => p.score < 100)
     .sort((a, b) => a.score - b.score)
     .slice(0, 5);
 
-  return { report, worstProducts, planLimit: FREE_PLAN_PRODUCT_LIMIT };
+  return {
+    report,
+    worstProducts,
+    planLimit: FREE_PLAN_PRODUCT_LIMIT,
+    analyzedAt: cached.analyzedAt.toISOString(),
+  };
 };
 
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  await invalidateCache(session.shop);
+  return redirect("/app");
+};
+
+function formatRelativeTime(isoDate) {
+  const diffMs = Date.now() - new Date(isoDate).getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "hace unos segundos";
+  if (min < 60) return `hace ${min} min`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `hace ${days} d`;
+}
+
 export default function Index() {
-  const { report, worstProducts, planLimit } = useLoaderData();
+  const { report, worstProducts, planLimit, analyzedAt } = useLoaderData();
 
   return (
     <s-page heading="SEO Analyzer">
@@ -43,9 +78,19 @@ export default function Index() {
                 : "."}
             </s-text>
           </s-stack>
-          <s-button href="/app/products" variant="primary">
-            Ver todos los productos
-          </s-button>
+          <s-text tone="subdued">
+            Último análisis {formatRelativeTime(analyzedAt)}
+          </s-text>
+          <s-stack direction="inline" gap="base">
+            <s-button href="/app/products" variant="primary">
+              Ver todos los productos
+            </s-button>
+            <Form method="post">
+              <s-button type="submit" variant="secondary">
+                Re-analizar ahora
+              </s-button>
+            </Form>
+          </s-stack>
         </s-stack>
       </s-section>
 

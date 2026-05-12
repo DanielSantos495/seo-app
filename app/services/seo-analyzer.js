@@ -138,9 +138,10 @@ export function analyzeProduct(product) {
   };
 }
 
-// Agrega un análisis global a partir de los análisis individuales.
-export function analyzeProducts(products) {
-  const analyses = products.map(analyzeProduct);
+// Agrega un conjunto de análisis individuales en un report.
+// Los `analyses` deben tener el shape de `analyzeProduct`: { score, issues, ... }.
+// Útil para reusar desde el cache sin re-analizar desde productos crudos.
+export function aggregateAnalyses(analyses) {
   const total = analyses.length;
   const overallScore =
     total === 0
@@ -160,6 +161,11 @@ export function analyzeProducts(products) {
     issuesByImpact,
     products: analyses,
   };
+}
+
+// Atajo: analiza los productos crudos y los agrega.
+export function analyzeProducts(products) {
+  return aggregateAnalyses(products.map(analyzeProduct));
 }
 
 function clamp(n, min, max) {

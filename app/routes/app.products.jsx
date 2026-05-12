@@ -3,46 +3,42 @@ import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { fetchAllProducts } from "../services/shopify-api";
+import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
 import {
-  analyzeProduct,
-  FREE_PLAN_PRODUCT_LIMIT,
-} from "../services/seo-analyzer";
+  buildItemsFromProducts,
+  getCachedItems,
+  setCachedItems,
+} from "../services/seo-cache";
 import { gidToNumericId } from "../services/admin-links";
 
 export const loader = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
-  const products = await fetchAllProducts(admin);
+  let cached = await getCachedItems(session.shop);
+  if (!cached) {
+    const products = await fetchAllProducts(admin);
+    const items = buildItemsFromProducts(products);
+    await setCachedItems(session.shop, items);
+    cached = { items, analyzedAt: new Date() };
+  }
 
-  // Plan free: solo los primeros N reciben análisis. Los demás quedan "locked".
-  const items = products.map((product, index) => {
-    if (index < FREE_PLAN_PRODUCT_LIMIT) {
-      const analysis = analyzeProduct(product);
-      return {
-        productId: product.id,
-        title: product.title,
-        handle: product.handle,
-        thumbnailUrl: product.images?.[0]?.url || null,
-        thumbnailAlt: product.images?.[0]?.altText || product.title,
-        score: analysis.score,
-        issues: analysis.issues,
-        locked: false,
-      };
-    }
-    return {
-      productId: product.id,
-      title: product.title,
-      handle: product.handle,
-      thumbnailUrl: product.images?.[0]?.url || null,
-      thumbnailAlt: product.images?.[0]?.altText || product.title,
-      score: null,
-      issues: [],
-      locked: true,
-    };
-  });
-
-  return { items, planLimit: FREE_PLAN_PRODUCT_LIMIT };
+  return {
+    items: cached.items,
+    planLimit: FREE_PLAN_PRODUCT_LIMIT,
+    analyzedAt: cached.analyzedAt.toISOString(),
+  };
 };
+
+function formatRelativeTime(isoDate) {
+  const diffMs = Date.now() - new Date(isoDate).getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return "hace unos segundos";
+  if (min < 60) return `hace ${min} min`;
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `hace ${days} d`;
+}
 
 const SORT_OPTIONS = [
   { value: "worst", label: "Peor score primero" },
@@ -52,7 +48,7 @@ const SORT_OPTIONS = [
 ];
 
 export default function Products() {
-  const { items, planLimit } = useLoaderData();
+  const { items, planLimit, analyzedAt } = useLoaderData();
 
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState("worst");
@@ -117,6 +113,9 @@ export default function Products() {
 
       <s-section>
         <s-stack direction="block" gap="base">
+          <s-text tone="subdued">
+            Último análisis {formatRelativeTime(analyzedAt)}
+          </s-text>
           <s-stack direction="inline" gap="base">
             <s-search-field
               label="Buscar producto"
