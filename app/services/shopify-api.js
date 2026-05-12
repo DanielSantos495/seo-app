@@ -1,6 +1,23 @@
 // Queries GraphQL contra la Admin API de Shopify.
 // Mantener separadas del UI para poder testear el scoring sin red.
 
+// En API 2026-04 las imágenes viven bajo `media` (modelo unificado con
+// videos/3D). Para SEO solo nos interesan las MediaImage.
+const MEDIA_FIELDS = `#graphql
+  media(first: 50) {
+    edges {
+      node {
+        id
+        alt
+        mediaContentType
+        ... on MediaImage {
+          image { url }
+        }
+      }
+    }
+  }
+`;
+
 export const GET_PRODUCTS_SEO_QUERY = `#graphql
   query GetProductsSeo($cursor: String) {
     products(first: 50, after: $cursor) {
@@ -18,15 +35,7 @@ export const GET_PRODUCTS_SEO_QUERY = `#graphql
             title
             description
           }
-          images(first: 10) {
-            edges {
-              node {
-                id
-                altText
-                url
-              }
-            }
-          }
+          ${MEDIA_FIELDS}
         }
       }
     }
@@ -44,12 +53,17 @@ export const GET_PRODUCT_SEO_QUERY = `#graphql
         title
         description
       }
-      images(first: 10) {
+      ${MEDIA_FIELDS}
+      variants(first: 100) {
         edges {
           node {
             id
-            altText
-            url
+            title
+            media(first: 1) {
+              edges {
+                node { id }
+              }
+            }
           }
         }
       }
@@ -57,18 +71,11 @@ export const GET_PRODUCT_SEO_QUERY = `#graphql
   }
 `;
 
-export const UPDATE_PRODUCT_IMAGES_MUTATION = `#graphql
-  mutation UpdateProductImages($input: ProductInput!) {
-    productUpdate(input: $input) {
-      product {
-        id
-        images(first: 10) {
-          edges {
-            node { id altText }
-          }
-        }
-      }
-      userErrors {
+export const PRODUCT_UPDATE_MEDIA_MUTATION = `#graphql
+  mutation ProductUpdateMedia($productId: ID!, $media: [UpdateMediaInput!]!) {
+    productUpdateMedia(productId: $productId, media: $media) {
+      media { id alt }
+      mediaUserErrors {
         field
         message
       }
@@ -113,8 +120,14 @@ export async function fetchProductById(admin, gid) {
   return product ? normalizeProduct(product) : null;
 }
 
-// Aplana `images.edges[].node` a un array simple — más cómodo para el analyzer.
+// Aplana `media` (filtrando solo MediaImage) y `variants` — más cómodo para
+// el analyzer y el generador de alt texts. La shape `images` se mantiene por
+// compatibilidad con el analyzer; ahora cada `id` es un MediaImage GID.
 function normalizeProduct(node) {
+  const mediaImages = (node.media?.edges || [])
+    .map((e) => e.node)
+    .filter((m) => m.mediaContentType === "IMAGE");
+
   return {
     id: node.id,
     title: node.title,
@@ -124,10 +137,40 @@ function normalizeProduct(node) {
       title: node.seo?.title || "",
       description: node.seo?.description || "",
     },
-    images: (node.images?.edges || []).map((e) => ({
+    images: mediaImages.map((m) => ({
+      id: m.id,
+      altText: m.alt || "",
+      url: m.image?.url || null,
+    })),
+    variants: (node.variants?.edges || []).map((e) => ({
       id: e.node.id,
-      altText: e.node.altText || "",
-      url: e.node.url,
+      title: e.node.title,
+      imageId: e.node.media?.edges?.[0]?.node?.id || null,
     })),
   };
+}
+
+// Aplica nuevos alt texts a un producto vía `productUpdateMedia`.
+// `altTextsByImageId` es un Map o objeto { mediaId: newAltText }.
+// Devuelve { ok, userErrors }.
+export async function updateProductAltTexts(
+  admin,
+  productGid,
+  altTextsByImageId,
+) {
+  const entries =
+    altTextsByImageId instanceof Map
+      ? Array.from(altTextsByImageId.entries())
+      : Object.entries(altTextsByImageId);
+
+  if (entries.length === 0) return { ok: true, userErrors: [] };
+
+  const media = entries.map(([id, alt]) => ({ id, alt }));
+
+  const response = await admin.graphql(PRODUCT_UPDATE_MEDIA_MUTATION, {
+    variables: { productId: productGid, media },
+  });
+  const json = await response.json();
+  const userErrors = json?.data?.productUpdateMedia?.mediaUserErrors || [];
+  return { ok: userErrors.length === 0, userErrors };
 }
