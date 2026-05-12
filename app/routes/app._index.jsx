@@ -1,4 +1,4 @@
-import { Form, redirect, useLoaderData } from "react-router";
+import { Form, redirect, useLoaderData, useLocation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { fetchAllProducts } from "../services/shopify-api";
@@ -12,16 +12,29 @@ import {
   invalidateCache,
   setCachedItems,
 } from "../services/seo-cache";
+import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
 
 export const loader = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
 
-  let cached = await getCachedItems(session.shop);
+  // Si el merchant acaba de aprobar el upgrade, invalidamos el cache para que
+  // el siguiente análisis se haga ya como Pro (sin límite).
+  const url = new URL(request.url);
+  if (url.searchParams.get("upgraded") === "1") {
+    await invalidateCache(session.shop);
+  }
+
+  const isPro = await checkIsPro(billing);
+  const currentPlan = isPro ? "pro" : "free";
+
+  let cached = await getCachedItems(session.shop, currentPlan);
   if (!cached) {
     const products = await fetchAllProducts(admin);
-    const items = buildItemsFromProducts(products);
-    await setCachedItems(session.shop, items);
+    const items = buildItemsFromProducts(products, {
+      limit: isPro ? null : FREE_PLAN_PRODUCT_LIMIT,
+    });
+    await setCachedItems(session.shop, items, currentPlan);
     cached = { items, analyzedAt: new Date() };
   }
 
@@ -40,6 +53,7 @@ export const loader = async ({ request }) => {
     worstProducts,
     planLimit: FREE_PLAN_PRODUCT_LIMIT,
     analyzedAt: cached.analyzedAt.toISOString(),
+    isPro,
   };
 };
 
@@ -61,10 +75,40 @@ function formatRelativeTime(isoDate) {
 }
 
 export default function Index() {
-  const { report, worstProducts, planLimit, analyzedAt } = useLoaderData();
+  const { report, worstProducts, planLimit, analyzedAt, isPro } =
+    useLoaderData();
+  // Preservar los query params de Shopify (host, embedded, id_token...) en el
+  // link al upgrade. Importante: el upgrade va por GET con full-page reload
+  // (`target="_top"`) para evitar el bug de single-fetch + billing.request.
+  const location = useLocation();
+  const upgradeUrl = `/app/upgrade${location.search}`;
 
   return (
     <s-page heading="SEO Analyzer">
+      {isPro ? (
+        <s-banner tone="success" heading="Plan Pro activo">
+          <s-paragraph>Analizamos todos los productos de tu tienda.</s-paragraph>
+        </s-banner>
+      ) : (
+        <s-banner
+          tone="info"
+          heading={`Plan Free · análisis limitado a ${planLimit} productos`}
+        >
+          <s-paragraph>
+            Mejora a Pro para analizar todos tus productos y desbloquear el bulk
+            fix de alt texts.
+          </s-paragraph>
+          <s-button
+            slot="secondaryActions"
+            variant="primary"
+            href={upgradeUrl}
+            target="_top"
+          >
+            Mejorar a Pro · $9/mes (7 días gratis)
+          </s-button>
+        </s-banner>
+      )}
+
       <s-section heading="Score general de tu tienda">
         <s-stack direction="block" gap="base">
           <s-stack direction="inline" gap="large" alignment="center">

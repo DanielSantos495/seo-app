@@ -6,8 +6,10 @@ import { analyzeProduct, FREE_PLAN_PRODUCT_LIMIT } from "./seo-analyzer";
 // muy seguido.
 export const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
 
-// Devuelve los items cacheados si existen y están frescos. Si no, null.
-export async function getCachedItems(shop) {
+// Devuelve los items cacheados si existen, están frescos y corresponden al
+// plan actual. Si no, null. Pasar `currentPlan` ("free" | "pro") evita servir
+// cache stale tras un upgrade/downgrade.
+export async function getCachedItems(shop, currentPlan) {
   const row = await prisma.seoCache.findUnique({ where: { shop } });
   if (!row) return null;
 
@@ -15,11 +17,13 @@ export async function getCachedItems(shop) {
   if (age > CACHE_TTL_MS) return null;
 
   const parsed = JSON.parse(row.data);
+  if (parsed.plan !== currentPlan) return null;
+
   return { items: parsed.items, analyzedAt: row.updatedAt };
 }
 
-export async function setCachedItems(shop, items) {
-  const data = JSON.stringify({ items });
+export async function setCachedItems(shop, items, plan) {
+  const data = JSON.stringify({ plan, items });
   await prisma.seoCache.upsert({
     where: { shop },
     update: { data },
@@ -32,9 +36,14 @@ export async function invalidateCache(shop) {
 }
 
 // Convierte productos crudos (de fetchAllProducts) en items canónicos
-// del cache. Aplica el límite del plan free: solo los primeros N reciben
-// análisis completo; los demás quedan como `locked: true`.
-export function buildItemsFromProducts(products) {
+// del cache. Aplica un límite: los primeros N reciben análisis completo;
+// los demás quedan como `locked: true`. Pasar `limit: null` (o Infinity) para
+// analizar todos — caso plan Pro.
+export function buildItemsFromProducts(
+  products,
+  { limit = FREE_PLAN_PRODUCT_LIMIT } = {},
+) {
+  const effectiveLimit = limit ?? Infinity;
   return products.map((product, index) => {
     const base = {
       productId: product.id,
@@ -43,7 +52,7 @@ export function buildItemsFromProducts(products) {
       thumbnailUrl: product.images?.[0]?.url || null,
       thumbnailAlt: product.images?.[0]?.altText || product.title,
     };
-    if (index < FREE_PLAN_PRODUCT_LIMIT) {
+    if (index < effectiveLimit) {
       const analysis = analyzeProduct(product);
       return {
         ...base,

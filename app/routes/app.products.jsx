@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useLocation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { fetchAllProducts } from "../services/shopify-api";
@@ -9,16 +9,22 @@ import {
   getCachedItems,
   setCachedItems,
 } from "../services/seo-cache";
+import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
 
 export const loader = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
 
-  let cached = await getCachedItems(session.shop);
+  const isPro = await checkIsPro(billing);
+  const currentPlan = isPro ? "pro" : "free";
+
+  let cached = await getCachedItems(session.shop, currentPlan);
   if (!cached) {
     const products = await fetchAllProducts(admin);
-    const items = buildItemsFromProducts(products);
-    await setCachedItems(session.shop, items);
+    const items = buildItemsFromProducts(products, {
+      limit: isPro ? null : FREE_PLAN_PRODUCT_LIMIT,
+    });
+    await setCachedItems(session.shop, items, currentPlan);
     cached = { items, analyzedAt: new Date() };
   }
 
@@ -26,6 +32,7 @@ export const loader = async ({ request }) => {
     items: cached.items,
     planLimit: FREE_PLAN_PRODUCT_LIMIT,
     analyzedAt: cached.analyzedAt.toISOString(),
+    isPro,
   };
 };
 
@@ -48,7 +55,11 @@ const SORT_OPTIONS = [
 ];
 
 export default function Products() {
-  const { items, planLimit, analyzedAt } = useLoaderData();
+  const { items, planLimit, analyzedAt, isPro } = useLoaderData();
+  // Upgrade va por GET con full-page reload (`target="_top"`) para evitar el bug
+  // de single-fetch + billing.request. Conservamos los query params de Shopify.
+  const location = useLocation();
+  const upgradeUrl = `/app/upgrade${location.search}`;
 
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState("worst");
@@ -101,7 +112,7 @@ export default function Products() {
         Dashboard
       </s-link>
 
-      {lockedCount > 0 && (
+      {!isPro && lockedCount > 0 && (
         <s-banner tone="info" heading="Estás en el plan Free">
           <s-paragraph>
             Analizamos los primeros {planLimit} productos. Tienes {lockedCount}{" "}
@@ -214,10 +225,10 @@ export default function Products() {
         <s-button
           slot="primaryAction"
           variant="primary"
-          command="--hide"
-          commandFor="upgrade-modal"
+          href={upgradeUrl}
+          target="_top"
         >
-          Próximamente
+          Mejorar a Pro · $9/mes (7 días gratis)
         </s-button>
         <s-button
           slot="secondaryActions"
