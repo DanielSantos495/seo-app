@@ -77,3 +77,17 @@ La app está en español hardcodeado. Para escalar al App Store global, internac
 ## Edición inline del alt text en el preview
 
 En el modal de bulk fix, permitir al merchant editar cada alt propuesto antes de aplicar. UX más rica pero implica controlled inputs y un PATCH selectivo.
+
+---
+
+## Test de carga con 1k+ productos
+
+Pendiente probar el flujo end-to-end en una dev store con catálogo grande (1000+ productos). Lo que hay que verificar:
+
+- Primer análisis: progreso visible, no se queda en 0, completa en tiempo razonable.
+- Bulk fix de 500+ alt texts: barra de progreso avanza, modal se puede cerrar y seguir en background.
+- Stale-while-revalidate: al volver tras 1h, banner "Actualizando datos" se muestra y se reemplaza por dashboard fresco al terminar.
+- Rate limit: si pega 429, el wrapper shopifyGraphql respeta Retry-After.
+- SQLite locks: con bulk fix + revalidación de análisis + sesiones nuevas concurrentes, ver si aparecen `database is locked`. Si pasa → toca Postgres antes de prod.
+
+Para crear data de prueba existe `scripts/clear-alt-texts.js` para vaciar alts y probar bulk fix. Falta un script equivalente para crear N productos sintéticos (o usar el Bulk Operations API de Shopify).
