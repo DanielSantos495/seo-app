@@ -1,31 +1,24 @@
 import { useEffect, useState } from "react";
 import {
-  Form,
-  useActionData,
   useFetcher,
   useLoaderData,
   useLocation,
-  useNavigation,
+  useRevalidator,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import {
-  bulkFixAltTextsForProducts,
-  fetchAllProducts,
-} from "../services/shopify-api";
-import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
-import {
-  buildItemsFromProducts,
-  getCachedItems,
-  invalidateCache,
-  setCachedItems,
-} from "../services/seo-cache";
+import { getCachedItems } from "../services/seo-cache";
 import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
+import { findActiveJob, serializeJob } from "../services/seo-job";
+import {
+  startAnalysisJob,
+  startBulkAltJob,
+} from "../services/seo-job-runner";
 import { labelForField, mostSevere } from "../services/issue-labels";
+import { JobProgress, useJobPolling } from "../components/JobProgress";
 
-const BULK_CAP = 50;
 const MAX_VISIBLE_PRODUCTS = 5;
 
 const IMPACT_TONE = { high: "critical", medium: "caution", low: "info" };
@@ -96,33 +89,51 @@ export const loader = async ({ request }) => {
   const isPro = await checkIsPro(billing, session.shop);
   const currentPlan = isPro ? "pro" : "free";
 
-  let cached = await getCachedItems(session.shop, currentPlan);
+  const cached = await getCachedItems(session.shop, currentPlan);
+
+  let activeAnalysisJob = null;
   if (!cached) {
-    const products = await fetchAllProducts(admin);
-    const items = buildItemsFromProducts(products, {
-      limit: isPro ? null : FREE_PLAN_PRODUCT_LIMIT,
-    });
-    await setCachedItems(session.shop, items, currentPlan);
-    cached = { items, analyzedAt: new Date() };
+    activeAnalysisJob = await startAnalysisJob(session.shop, admin, { isPro });
+  } else if (cached.isStale) {
+    startAnalysisJob(session.shop, admin, { isPro }).catch(() => {});
+    activeAnalysisJob = await findActiveJob(session.shop, "analysis");
+  }
+
+  const activeBulkJob = await findActiveJob(session.shop, "bulk_alt");
+
+  if (!cached) {
+    return {
+      analyzing: true,
+      analysisJob: serializeJob(activeAnalysisJob),
+      bulkJob: serializeJob(activeBulkJob),
+      groups: [],
+      analyzedAt: null,
+      isPro,
+      isStale: false,
+      bulkFix: { eligible: 0, processable: 0 },
+    };
   }
 
   const groups = groupIssuesByField(cached.items);
   const eligibleAltGids = getEligibleAltGids(cached.items);
 
-  // Los samples se cargan on-demand desde /api/bulk-preview cuando el merchant
-  // abre el modal — antes los resolvíamos en cada loader inútilmente.
   return {
+    analyzing: false,
+    analysisJob: serializeJob(activeAnalysisJob),
+    bulkJob: serializeJob(activeBulkJob),
     groups,
     analyzedAt: cached.analyzedAt.toISOString(),
     isPro,
+    isStale: cached.isStale,
     bulkFix: {
       eligible: eligibleAltGids.length,
-      processable: Math.min(eligibleAltGids.length, BULK_CAP),
-      exceedsCap: eligibleAltGids.length > BULK_CAP,
+      processable: eligibleAltGids.length,
     },
   };
 };
 
+// El action dispara un job de bulk fix y vuelve al toque con el jobId. El
+// cliente hace polling al estado del job — el POST no bloquea.
 export const action = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
 
@@ -138,15 +149,13 @@ export const action = async ({ request }) => {
   if (!cached) {
     return { ok: false, error: "Cache no disponible. Recargá la página." };
   }
-  const eligibleGids = getEligibleAltGids(cached.items).slice(0, BULK_CAP);
+  const eligibleGids = getEligibleAltGids(cached.items);
   if (eligibleGids.length === 0) {
-    return { ok: true, totalProducts: 0, totalImages: 0, errors: [] };
+    return { ok: true, jobId: null, empty: true };
   }
 
-  const result = await bulkFixAltTextsForProducts(admin, eligibleGids);
-  await invalidateCache(session.shop);
-
-  return { ok: true, ...result };
+  const job = await startBulkAltJob(session.shop, admin, eligibleGids);
+  return { ok: true, jobId: job.id };
 };
 
 function formatRelativeTime(isoDate) {
@@ -161,45 +170,99 @@ function formatRelativeTime(isoDate) {
 }
 
 export default function Issues() {
-  const { groups, analyzedAt, isPro, bulkFix } = useLoaderData();
-  const actionData = useActionData();
-  const navigation = useNavigation();
+  const {
+    analyzing,
+    analysisJob: initialAnalysisJob,
+    bulkJob: initialBulkJob,
+    groups,
+    analyzedAt,
+    isPro,
+    isStale,
+    bulkFix,
+  } = useLoaderData();
   const shopify = useAppBridge();
   const location = useLocation();
   const upgradeUrl = `/app/upgrade${location.search}`;
-  const isApplying = navigation.state === "submitting";
+  const revalidator = useRevalidator();
   const [expandedGroups, setExpandedGroups] = useState({});
-  // Fetcher para cargar samples del bulk fix on-demand al abrir el modal.
+  // Preview fetcher: samples del modal.
   const previewFetcher = useFetcher();
   const samples = previewFetcher.data?.samples;
   const isLoadingPreview = previewFetcher.state === "loading";
+  // Bulk fix fetcher: dispara job sin remontar.
+  const bulkFetcher = useFetcher();
+  const bulkActionData = bulkFetcher.data;
+  const submittedJobId = bulkActionData?.jobId;
 
   const toggleExpand = (field) =>
     setExpandedGroups((s) => ({ ...s, [field]: !s[field] }));
 
+  // Job de análisis (stale o primer fetch).
+  const { job: analysisJob, isActive: isAnalyzing } = useJobPolling({
+    initialJob: initialAnalysisJob,
+    byType: "analysis",
+    onFinish: () => revalidator.revalidate(),
+  });
+
+  // Job de bulk fix.
+  const { job: bulkJob, isActive: isBulkRunning } = useJobPolling({
+    initialJob: submittedJobId
+      ? { id: submittedJobId, status: "running", processed: 0, total: 0 }
+      : initialBulkJob,
+    byId: submittedJobId,
+    byType: submittedJobId ? null : "bulk_alt",
+    onFinish: (finalJob) => {
+      const summary = finalJob.resultSummary || {};
+      const errCount = summary.errors?.length || 0;
+      const ok = (summary.totalProducts || 0) - errCount;
+      if (summary.totalImages === 0) {
+        shopify.toast.show("No había alt texts para agregar");
+      } else {
+        shopify.toast.show(
+          `Listo: ${ok} producto${ok === 1 ? "" : "s"} · ${summary.totalImages || 0} alt text${summary.totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
+          errCount ? { isError: true } : undefined,
+        );
+      }
+      revalidator.revalidate();
+    },
+  });
+
   useEffect(() => {
-    if (!actionData) return;
-    if (actionData.error) {
-      shopify.toast.show(`Error: ${actionData.error}`, { isError: true });
-      return;
+    if (bulkActionData?.error) {
+      shopify.toast.show(`Error: ${bulkActionData.error}`, { isError: true });
     }
-    if (actionData.totalImages === 0) {
-      shopify.toast.show("No había alt texts para agregar");
-      return;
-    }
-    const errCount = actionData.errors?.length || 0;
-    const okCount = actionData.totalProducts - errCount;
-    shopify.toast.show(
-      `Listo: ${okCount} producto${okCount === 1 ? "" : "s"} · ${actionData.totalImages} alt text${actionData.totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
-      errCount ? { isError: true } : undefined,
+  }, [bulkActionData, shopify]);
+
+  const isApplying = bulkFetcher.state !== "idle" || isBulkRunning;
+
+  if (analyzing) {
+    return (
+      <s-page heading="Issues">
+        <s-link slot="breadcrumbActions" href="/app">
+          Dashboard
+        </s-link>
+        <s-section heading="Analizando tu tienda">
+          <JobProgress job={analysisJob} label="Analizando productos" />
+        </s-section>
+      </s-page>
     );
-  }, [actionData, shopify]);
+  }
 
   return (
     <s-page heading="Issues">
       <s-link slot="breadcrumbActions" href="/app">
         Dashboard
       </s-link>
+
+      {isStale && isAnalyzing && (
+        <s-banner tone="info" heading="Actualizando datos">
+          <s-paragraph>
+            Mostramos el último análisis disponible mientras refrescamos en
+            background.
+          </s-paragraph>
+          <JobProgress job={analysisJob} label="Re-analizando" />
+        </s-banner>
+      )}
 
       <s-text tone="subdued">
         Último análisis {formatRelativeTime(analyzedAt)}
@@ -299,47 +362,46 @@ export default function Issues() {
             {bulkFix.processable === 1 ? "" : "s"} y agregar alt text a sus
             imágenes faltantes.
           </s-paragraph>
-          {bulkFix.exceedsCap && (
-            <s-banner tone="info">
-              <s-paragraph>
-                Tu tienda tiene {bulkFix.eligible} productos elegibles.
-                Procesaremos los primeros {BULK_CAP}; volvé a ejecutar para el
-                resto.
-              </s-paragraph>
-            </s-banner>
+          {isBulkRunning && (
+            <JobProgress job={bulkJob} label="Aplicando alt texts" />
           )}
-          {isLoadingPreview && (
+          {!isBulkRunning && isLoadingPreview && (
             <s-stack direction="inline" gap="tight" alignment="center">
               <s-spinner />
               <s-text tone="subdued">Generando ejemplos…</s-text>
             </s-stack>
           )}
-          {!isLoadingPreview && samples && samples.length > 0 && (
-            <s-stack direction="block" gap="tight">
-              <s-text tone="subdued">Ejemplos del patrón:</s-text>
-              {samples.map((s, idx) => (
-                <s-text key={idx}>
-                  {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
-                </s-text>
-              ))}
-            </s-stack>
-          )}
-          <Form method="post" slot="primaryAction">
+          {!isBulkRunning &&
+            !isLoadingPreview &&
+            samples &&
+            samples.length > 0 && (
+              <s-stack direction="block" gap="tight">
+                <s-text tone="subdued">Ejemplos del patrón:</s-text>
+                {samples.map((s, idx) => (
+                  <s-text key={idx}>
+                    {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
+                  </s-text>
+                ))}
+              </s-stack>
+            )}
+          <bulkFetcher.Form method="post" slot="primaryAction">
             <s-button
               type="submit"
               variant="primary"
               {...(isApplying ? { loading: true } : {})}
+              {...(isBulkRunning ? { disabled: true } : {})}
             >
-              Aplicar a {bulkFix.processable} producto
-              {bulkFix.processable === 1 ? "" : "s"}
+              {isBulkRunning
+                ? "En curso…"
+                : `Aplicar a ${bulkFix.processable} producto${bulkFix.processable === 1 ? "" : "s"}`}
             </s-button>
-          </Form>
+          </bulkFetcher.Form>
           <s-button
             slot="secondaryActions"
             command="--hide"
             commandFor="bulk-alt-modal"
           >
-            Cancelar
+            {isBulkRunning ? "Cerrar (sigue en background)" : "Cancelar"}
           </s-button>
         </s-modal>
       )}

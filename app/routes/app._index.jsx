@@ -1,20 +1,23 @@
-import { Form, redirect, useLoaderData, useLocation } from "react-router";
+import {
+  Form,
+  redirect,
+  useLoaderData,
+  useLocation,
+  useRevalidator,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { fetchAllProducts } from "../services/shopify-api";
 import {
   aggregateAnalyses,
   FREE_PLAN_PRODUCT_LIMIT,
 } from "../services/seo-analyzer";
-import {
-  buildItemsFromProducts,
-  getCachedItems,
-  invalidateCache,
-  setCachedItems,
-} from "../services/seo-cache";
+import { getCachedItems, invalidateCache } from "../services/seo-cache";
 import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
+import { findActiveJob, serializeJob } from "../services/seo-job";
+import { startAnalysisJob } from "../services/seo-job-runner";
 import { PrefetchButton, PrefetchClickable } from "../components/NavLink";
+import { JobProgress, useJobPolling } from "../components/JobProgress";
 
 export const loader = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
@@ -29,14 +32,33 @@ export const loader = async ({ request }) => {
   const isPro = await checkIsPro(billing, session.shop);
   const currentPlan = isPro ? "pro" : "free";
 
-  let cached = await getCachedItems(session.shop, currentPlan);
+  const cached = await getCachedItems(session.shop, currentPlan);
+
+  // Stale-while-revalidate: si tenemos cache (aunque sea stale), respondemos
+  // YA con esos datos y disparamos un re-análisis en background sin esperarlo.
+  // Si no hay cache, también disparamos el job pero respondemos en estado
+  // "analyzing" para que la UI muestre progreso (no se queda colgada).
+  let activeJob = null;
   if (!cached) {
-    const products = await fetchAllProducts(admin);
-    const items = buildItemsFromProducts(products, {
-      limit: isPro ? null : FREE_PLAN_PRODUCT_LIMIT,
-    });
-    await setCachedItems(session.shop, items, currentPlan);
-    cached = { items, analyzedAt: new Date() };
+    activeJob = await startAnalysisJob(session.shop, admin, { isPro });
+  } else if (cached.isStale) {
+    // Fire-and-forget: el loader no espera al job.
+    startAnalysisJob(session.shop, admin, { isPro }).catch(() => {});
+    activeJob = await findActiveJob(session.shop, "analysis");
+  }
+
+  if (!cached) {
+    // Primer análisis en curso: no podemos calcular report aún.
+    return {
+      analyzing: true,
+      job: serializeJob(activeJob),
+      report: null,
+      worstProducts: [],
+      planLimit: FREE_PLAN_PRODUCT_LIMIT,
+      analyzedAt: null,
+      isPro,
+      isStale: false,
+    };
   }
 
   // Solo los items no-locked tienen scoring. El report del dashboard se calcula
@@ -49,21 +71,25 @@ export const loader = async ({ request }) => {
     .sort((a, b) => a.score - b.score)
     .slice(0, 5);
 
-  // Ya no enviamos `exportItems` al cliente: la descarga del CSV pasa por
-  // /api/export.csv que genera el archivo server-side y lo stream-ea. Ahorra
-  // MBs de payload en tiendas Pro grandes.
   return {
+    analyzing: false,
+    job: serializeJob(activeJob),
     report,
     worstProducts,
     planLimit: FREE_PLAN_PRODUCT_LIMIT,
     analyzedAt: cached.analyzedAt.toISOString(),
     isPro,
+    isStale: cached.isStale,
   };
 };
 
+// "Re-analizar ahora": dispara un job de análisis y vuelve al dashboard, que
+// ahora muestra el progreso mientras corre.
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
+  const isPro = await checkIsPro(billing, session.shop);
   await invalidateCache(session.shop);
+  await startAnalysisJob(session.shop, admin, { isPro });
   return redirect("/app");
 };
 
@@ -102,16 +128,61 @@ async function downloadCsv() {
 }
 
 export default function Index() {
-  const { report, worstProducts, planLimit, analyzedAt, isPro } =
-    useLoaderData();
+  const {
+    analyzing,
+    job: initialJob,
+    report,
+    worstProducts,
+    planLimit,
+    analyzedAt,
+    isPro,
+    isStale,
+  } = useLoaderData();
   // Preservar los query params de Shopify (host, embedded, id_token...) en el
   // link al upgrade. Importante: el upgrade va por GET con full-page reload
   // (`target="_top"`) para evitar el bug de single-fetch + billing.request.
   const location = useLocation();
   const upgradeUrl = `/app/upgrade${location.search}`;
 
+  // Polling del job de análisis: si hay uno corriendo (sea porque no había
+  // cache o porque el cache es stale), trackeamos su progreso y revalidamos
+  // el loader cuando termina para mostrar el reporte fresco.
+  const revalidator = useRevalidator();
+  const { job, isActive } = useJobPolling({
+    initialJob,
+    byType: "analysis",
+    onFinish: () => revalidator.revalidate(),
+  });
+
+  // Estado "primer análisis": no hay reporte aún, mostramos solo progreso.
+  if (analyzing && !report) {
+    return (
+      <s-page heading="SEO Analyzer">
+        <s-section heading="Analizando tu tienda">
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              Estamos analizando todos tus productos por primera vez. Esto
+              puede tomar unos minutos para tiendas grandes — podés cerrar esta
+              pestaña, el análisis sigue en background.
+            </s-paragraph>
+            <JobProgress job={job} label="Analizando productos" />
+          </s-stack>
+        </s-section>
+      </s-page>
+    );
+  }
+
   return (
     <s-page heading="SEO Analyzer">
+      {isStale && isActive && (
+        <s-banner tone="info" heading="Actualizando datos">
+          <s-paragraph>
+            Mostramos el último análisis disponible mientras refrescamos en
+            background.
+          </s-paragraph>
+          <JobProgress job={job} label="Re-analizando" />
+        </s-banner>
+      )}
       {isPro ? (
         <s-banner tone="success" heading="Plan Pro activo">
           <s-paragraph>Analizamos todos los productos de tu tienda.</s-paragraph>

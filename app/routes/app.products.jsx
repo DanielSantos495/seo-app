@@ -1,30 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Form,
-  useActionData,
   useFetcher,
   useLoaderData,
   useLocation,
-  useNavigation,
+  useRevalidator,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import {
-  bulkFixAltTextsForProducts,
-  fetchAllProducts,
-} from "../services/shopify-api";
 import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
-import {
-  buildItemsFromProducts,
-  getCachedItems,
-  invalidateCache,
-  setCachedItems,
-} from "../services/seo-cache";
+import { getCachedItems } from "../services/seo-cache";
 import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
-
-const BULK_CAP = 50;
+import { findActiveJob, serializeJob } from "../services/seo-job";
+import {
+  startAnalysisJob,
+  startBulkAltJob,
+} from "../services/seo-job-runner";
+import { JobProgress, useJobPolling } from "../components/JobProgress";
 
 function getEligibleGids(items) {
   return items
@@ -42,34 +35,54 @@ export const loader = async ({ request }) => {
   const isPro = await checkIsPro(billing, session.shop);
   const currentPlan = isPro ? "pro" : "free";
 
-  let cached = await getCachedItems(session.shop, currentPlan);
+  const cached = await getCachedItems(session.shop, currentPlan);
+
+  let activeAnalysisJob = null;
   if (!cached) {
-    const products = await fetchAllProducts(admin);
-    const items = buildItemsFromProducts(products, {
-      limit: isPro ? null : FREE_PLAN_PRODUCT_LIMIT,
-    });
-    await setCachedItems(session.shop, items, currentPlan);
-    cached = { items, analyzedAt: new Date() };
+    activeAnalysisJob = await startAnalysisJob(session.shop, admin, { isPro });
+  } else if (cached.isStale) {
+    startAnalysisJob(session.shop, admin, { isPro }).catch(() => {});
+    activeAnalysisJob = await findActiveJob(session.shop, "analysis");
+  }
+
+  const activeBulkJob = await findActiveJob(session.shop, "bulk_alt");
+
+  if (!cached) {
+    return {
+      analyzing: true,
+      analysisJob: serializeJob(activeAnalysisJob),
+      bulkJob: serializeJob(activeBulkJob),
+      items: [],
+      planLimit: FREE_PLAN_PRODUCT_LIMIT,
+      analyzedAt: null,
+      isPro,
+      isStale: false,
+      bulkFix: { eligible: 0, processable: 0 },
+    };
   }
 
   const eligibleGids = getEligibleGids(cached.items);
 
-  // Nota: ya no resolvemos `samples` acá. Se cargan on-demand desde
-  // /api/bulk-preview cuando el merchant abre el modal — ahorra 3 round-trips
-  // por navegación.
   return {
+    analyzing: false,
+    analysisJob: serializeJob(activeAnalysisJob),
+    bulkJob: serializeJob(activeBulkJob),
     items: cached.items,
     planLimit: FREE_PLAN_PRODUCT_LIMIT,
     analyzedAt: cached.analyzedAt.toISOString(),
     isPro,
+    isStale: cached.isStale,
     bulkFix: {
+      // Sin cap: el job procesa todos los elegibles. Mantenemos `eligible`
+      // como total y `processable` por compatibilidad con el modal.
       eligible: eligibleGids.length,
-      processable: Math.min(eligibleGids.length, BULK_CAP),
-      exceedsCap: eligibleGids.length > BULK_CAP,
+      processable: eligibleGids.length,
     },
   };
 };
 
+// El action dispara un job de bulk fix y devuelve inmediatamente el jobId.
+// El cliente polléa /api/job-status para ver progreso. Sin bloqueo del POST.
 export const action = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
 
@@ -86,15 +99,13 @@ export const action = async ({ request }) => {
   if (!cached) {
     return { ok: false, error: "Cache no disponible. Recargá la página." };
   }
-  const eligibleGids = getEligibleGids(cached.items).slice(0, BULK_CAP);
+  const eligibleGids = getEligibleGids(cached.items);
   if (eligibleGids.length === 0) {
-    return { ok: true, totalProducts: 0, totalImages: 0, errors: [] };
+    return { ok: true, jobId: null, empty: true };
   }
 
-  const result = await bulkFixAltTextsForProducts(admin, eligibleGids);
-  await invalidateCache(session.shop);
-
-  return { ok: true, ...result };
+  const job = await startBulkAltJob(session.shop, admin, eligibleGids);
+  return { ok: true, jobId: job.id };
 };
 
 function formatRelativeTime(isoDate) {
@@ -116,37 +127,71 @@ const SORT_OPTIONS = [
 ];
 
 export default function Products() {
-  const { items, planLimit, analyzedAt, isPro, bulkFix } = useLoaderData();
-  const actionData = useActionData();
-  const navigation = useNavigation();
+  const {
+    analyzing,
+    analysisJob: initialAnalysisJob,
+    bulkJob: initialBulkJob,
+    items,
+    planLimit,
+    analyzedAt,
+    isPro,
+    isStale,
+    bulkFix,
+  } = useLoaderData();
   const shopify = useAppBridge();
-  // Fetcher para cargar los samples del bulk fix on-demand al abrir el modal.
+  // Preview fetcher: trae los samples cuando se abre el modal.
   const previewFetcher = useFetcher();
   const samples = previewFetcher.data?.samples;
   const isLoadingPreview = previewFetcher.state === "loading";
+  // Bulk fix fetcher: ya no usamos Form/useNavigation porque queremos disparar
+  // el job sin remontar la página. El action devuelve { jobId } al toque.
+  const bulkFetcher = useFetcher();
+  const bulkActionData = bulkFetcher.data;
+  const submittedJobId = bulkActionData?.jobId;
   // Upgrade va por GET con full-page reload (`target="_top"`) para evitar el bug
   // de single-fetch + billing.request. Conservamos los query params de Shopify.
   const location = useLocation();
   const upgradeUrl = `/app/upgrade${location.search}`;
-  const isApplying = navigation.state === "submitting";
+  const revalidator = useRevalidator();
 
+  // Job de análisis (stale-while-revalidate o primer fetch).
+  const { job: analysisJob, isActive: isAnalyzing } = useJobPolling({
+    initialJob: initialAnalysisJob,
+    byType: "analysis",
+    onFinish: () => revalidator.revalidate(),
+  });
+
+  // Job de bulk fix activo.
+  const { job: bulkJob, isActive: isBulkRunning } = useJobPolling({
+    initialJob: submittedJobId
+      ? { id: submittedJobId, status: "running", processed: 0, total: 0 }
+      : initialBulkJob,
+    byId: submittedJobId,
+    byType: submittedJobId ? null : "bulk_alt",
+    onFinish: (finalJob) => {
+      const summary = finalJob.resultSummary || {};
+      const errCount = summary.errors?.length || 0;
+      const ok = (summary.totalProducts || 0) - errCount;
+      if (summary.totalImages === 0) {
+        shopify.toast.show("No había alt texts para agregar");
+      } else {
+        shopify.toast.show(
+          `Listo: ${ok} producto${ok === 1 ? "" : "s"} · ${summary.totalImages || 0} alt text${summary.totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
+          errCount ? { isError: true } : undefined,
+        );
+      }
+      revalidator.revalidate();
+    },
+  });
+
+  // Si la action devolvió error.
   useEffect(() => {
-    if (!actionData) return;
-    if (actionData.error) {
-      shopify.toast.show(`Error: ${actionData.error}`, { isError: true });
-      return;
+    if (bulkActionData?.error) {
+      shopify.toast.show(`Error: ${bulkActionData.error}`, { isError: true });
     }
-    if (actionData.totalImages === 0) {
-      shopify.toast.show("No había alt texts para agregar");
-      return;
-    }
-    const errCount = actionData.errors?.length || 0;
-    const okCount = actionData.totalProducts - errCount;
-    shopify.toast.show(
-      `Listo: ${okCount} producto${okCount === 1 ? "" : "s"} · ${actionData.totalImages} alt text${actionData.totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
-      errCount ? { isError: true } : undefined,
-    );
-  }, [actionData, shopify]);
+  }, [bulkActionData, shopify]);
+
+  const isApplying = bulkFetcher.state !== "idle" || isBulkRunning;
 
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState("worst");
@@ -193,11 +238,35 @@ export default function Products() {
 
   const lockedCount = items.filter((i) => i.locked).length;
 
+  // Primer análisis en curso: sin items, solo mostramos progreso.
+  if (analyzing) {
+    return (
+      <s-page heading="Productos">
+        <s-link slot="breadcrumbActions" href="/app">
+          Dashboard
+        </s-link>
+        <s-section heading="Analizando tu tienda">
+          <JobProgress job={analysisJob} label="Analizando productos" />
+        </s-section>
+      </s-page>
+    );
+  }
+
   return (
     <s-page heading="Productos">
       <s-link slot="breadcrumbActions" href="/app">
         Dashboard
       </s-link>
+
+      {isStale && isAnalyzing && (
+        <s-banner tone="info" heading="Actualizando datos">
+          <s-paragraph>
+            Mostramos el último análisis disponible mientras refrescamos en
+            background.
+          </s-paragraph>
+          <JobProgress job={analysisJob} label="Re-analizando" />
+        </s-banner>
+      )}
 
       {!isPro && lockedCount > 0 && (
         <s-banner tone="info" heading="Estás en el plan Free">
@@ -327,47 +396,46 @@ export default function Products() {
             {bulkFix.processable === 1 ? "" : "s"} y agregar alt text a sus
             imágenes faltantes.
           </s-paragraph>
-          {bulkFix.exceedsCap && (
-            <s-banner tone="info">
-              <s-paragraph>
-                Tu tienda tiene {bulkFix.eligible} productos elegibles.
-                Procesaremos los primeros {BULK_CAP}; volvé a ejecutar para
-                el resto.
-              </s-paragraph>
-            </s-banner>
+          {isBulkRunning && (
+            <JobProgress job={bulkJob} label="Aplicando alt texts" />
           )}
-          {isLoadingPreview && (
+          {!isBulkRunning && isLoadingPreview && (
             <s-stack direction="inline" gap="tight" alignment="center">
               <s-spinner />
               <s-text tone="subdued">Generando ejemplos…</s-text>
             </s-stack>
           )}
-          {!isLoadingPreview && samples && samples.length > 0 && (
-            <s-stack direction="block" gap="tight">
-              <s-text tone="subdued">Ejemplos del patrón:</s-text>
-              {samples.map((s, idx) => (
-                <s-text key={idx}>
-                  {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
-                </s-text>
-              ))}
-            </s-stack>
-          )}
-          <Form method="post" slot="primaryAction">
+          {!isBulkRunning &&
+            !isLoadingPreview &&
+            samples &&
+            samples.length > 0 && (
+              <s-stack direction="block" gap="tight">
+                <s-text tone="subdued">Ejemplos del patrón:</s-text>
+                {samples.map((s, idx) => (
+                  <s-text key={idx}>
+                    {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
+                  </s-text>
+                ))}
+              </s-stack>
+            )}
+          <bulkFetcher.Form method="post" slot="primaryAction">
             <s-button
               type="submit"
               variant="primary"
               {...(isApplying ? { loading: true } : {})}
+              {...(isBulkRunning ? { disabled: true } : {})}
             >
-              Aplicar a {bulkFix.processable} producto
-              {bulkFix.processable === 1 ? "" : "s"}
+              {isBulkRunning
+                ? "En curso…"
+                : `Aplicar a ${bulkFix.processable} producto${bulkFix.processable === 1 ? "" : "s"}`}
             </s-button>
-          </Form>
+          </bulkFetcher.Form>
           <s-button
             slot="secondaryActions"
             command="--hide"
             commandFor="bulk-alt-modal"
           >
-            Cancelar
+            {isBulkRunning ? "Cerrar (sigue en background)" : "Cancelar"}
           </s-button>
         </s-modal>
       )}

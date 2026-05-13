@@ -90,7 +90,11 @@ export const PRODUCT_UPDATE_MEDIA_MUTATION = `#graphql
 
 // Trae productos paginando con cursor. Aplana edges → array de nodos.
 // `limit` opcional para el plan free (corta al llegar a N productos).
-export async function fetchAllProducts(admin, { limit } = {}) {
+// `onPage` opcional: callback invocado tras cada página recibida con
+// `{ processed, total? }` para que el caller actualice progreso. Para que sea
+// útil al usuario, total no se conoce hasta terminar — devolvemos solo
+// `processed` mientras tanto.
+export async function fetchAllProducts(admin, { limit, onPage } = {}) {
   const products = [];
   let cursor = null;
   let hasNextPage = true;
@@ -104,9 +108,13 @@ export async function fetchAllProducts(admin, { limit } = {}) {
 
     for (const edge of page.edges) {
       products.push(normalizeProduct(edge.node));
-      if (limit && products.length >= limit) return products;
+      if (limit && products.length >= limit) {
+        if (onPage) await onPage({ processed: products.length });
+        return products;
+      }
     }
 
+    if (onPage) await onPage({ processed: products.length });
     hasNextPage = page.pageInfo.hasNextPage;
     cursor = page.pageInfo.endCursor;
   }
@@ -178,20 +186,39 @@ export async function previewAltTextsForProducts(
 // rate-limit lo maneja `shopifyGraphql` leyendo el bucket real de Shopify
 // (ver shopify-fetch.js). Esto baja el tiempo total ~30-40% cuando hay
 // capacidad y lo respeta cuando no la hay.
-export async function bulkFixAltTextsForProducts(admin, productGids) {
+//
+// `onProgress({ processed, fixedProductIds })`: callback opcional invocado
+// tras cada producto procesado. Se usa para persistir heartbeat del job y que
+// el cliente pueda mostrar progreso por polling.
+export async function bulkFixAltTextsForProducts(
+  admin,
+  productGids,
+  { onProgress } = {},
+) {
   const { generateAltTexts } = await import("./alt-text-generator");
   let totalImages = 0;
+  let processed = 0;
   const errors = [];
+  const fixedProductIds = [];
 
   for (const gid of productGids) {
     try {
       const product = await fetchProductById(admin, gid);
-      if (!product) continue;
+      if (!product) {
+        processed++;
+        if (onProgress) await onProgress({ processed, fixedProductIds });
+        continue;
+      }
       const alts = generateAltTexts(product);
-      if (alts.size === 0) continue;
+      if (alts.size === 0) {
+        processed++;
+        if (onProgress) await onProgress({ processed, fixedProductIds });
+        continue;
+      }
       const result = await updateProductAltTexts(admin, gid, alts);
       if (result.ok) {
         totalImages += alts.size;
+        fixedProductIds.push(gid);
       } else {
         errors.push({
           productId: gid,
@@ -201,9 +228,16 @@ export async function bulkFixAltTextsForProducts(admin, productGids) {
     } catch (e) {
       errors.push({ productId: gid, message: e.message });
     }
+    processed++;
+    if (onProgress) await onProgress({ processed, fixedProductIds });
   }
 
-  return { totalProducts: productGids.length, totalImages, errors };
+  return {
+    totalProducts: productGids.length,
+    totalImages,
+    errors,
+    fixedProductIds,
+  };
 }
 
 // Aplica nuevos alt texts a un producto vía `productUpdateMedia`.

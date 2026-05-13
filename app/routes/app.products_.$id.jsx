@@ -17,7 +17,7 @@ import { analyzeProduct } from "../services/seo-analyzer";
 import { generateAltTexts } from "../services/alt-text-generator";
 import { productAdminUrl } from "../services/admin-links";
 import { checkIsPro } from "../services/billing";
-import { invalidateCache } from "../services/seo-cache";
+import { updateCachedItems } from "../services/seo-cache";
 import IssuesList from "../components/IssuesList";
 
 export const loader = async ({ request, params }) => {
@@ -75,8 +75,21 @@ export const action = async ({ request, params }) => {
     };
   }
 
-  // Cache global de la tienda — el score del producto cambió, hay que refrescar.
-  await invalidateCache(session.shop);
+  // Update granular: solo actualizamos este producto en el cache. Antes
+  // invalidábamos todo, lo que forzaba un re-fetch completo del catálogo en
+  // la siguiente navegación. Re-analizamos con la data fresca de Shopify.
+  const refreshed = await fetchProductById(admin, gid);
+  if (refreshed) {
+    const newAnalysis = analyzeProduct(refreshed);
+    await updateCachedItems(session.shop, [gid], (item) => ({
+      ...item,
+      score: newAnalysis.score,
+      issues: newAnalysis.issues,
+      thumbnailUrl: refreshed.images?.[0]?.url || item.thumbnailUrl,
+      thumbnailAlt:
+        refreshed.images?.[0]?.altText || item.thumbnailAlt,
+    }));
+  }
 
   return { ok: true, count: altTexts.size };
 };

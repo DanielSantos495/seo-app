@@ -1,0 +1,99 @@
+/* eslint-disable react/prop-types */
+import { useEffect, useRef } from "react";
+import { useFetcher, useRevalidator } from "react-router";
+
+// Hook que hace polling al endpoint /api/job-status cada `intervalMs` mientras
+// el job esté pending/running. Cuando termina (done/failed), dispara
+// `onFinish(finalJob)` y deja de pollear.
+//
+// Acepta `initialJob` (el que vino del loader) para mostrar progreso
+// inmediato sin esperar al primer poll.
+//
+// Modo:
+//   - `byId`: si se pasa, consulta el job específico.
+//   - `byType`: si se pasa (sin id), consulta el último job activo del tipo.
+export function useJobPolling({
+  initialJob,
+  byId,
+  byType,
+  intervalMs = 2000,
+  onFinish,
+}) {
+  const fetcher = useFetcher();
+  const onFinishRef = useRef(onFinish);
+  onFinishRef.current = onFinish;
+
+  // El job actual es el último del fetcher si llegó, o el initial.
+  const job = fetcher.data?.job || initialJob || null;
+  const isActive = job && (job.status === "pending" || job.status === "running");
+
+  const url = byId
+    ? `/api/job-status?id=${encodeURIComponent(byId)}`
+    : byType
+      ? `/api/job-status?type=${encodeURIComponent(byType)}`
+      : null;
+
+  useEffect(() => {
+    if (!url) return;
+    if (!isActive && !byType) return; // si no hay job activo y no estamos buscando uno por tipo, no pollear
+
+    const tick = () => {
+      if (fetcher.state === "idle") fetcher.load(url);
+    };
+    // Primer tick inmediato si no tenemos data aún.
+    if (!fetcher.data) tick();
+    const id = setInterval(tick, intervalMs);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, isActive, byType]);
+
+  // Detectar transición running → done/failed.
+  const wasActiveRef = useRef(isActive);
+  useEffect(() => {
+    if (wasActiveRef.current && !isActive && job) {
+      onFinishRef.current?.(job);
+    }
+    wasActiveRef.current = isActive;
+  }, [isActive, job]);
+
+  return { job, isActive };
+}
+
+// Vista visual estándar del progreso de un job. Muestra barra (si conocemos
+// total) o spinner indeterminado (si no), texto X / Y, y ETA.
+export function JobProgress({ job, label = "Procesando" }) {
+  if (!job) return null;
+  const { processed, total, status } = job;
+  const pct =
+    total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : null;
+
+  if (status === "failed") {
+    return (
+      <s-banner tone="critical" heading="El proceso falló">
+        <s-paragraph>
+          {job.errorMessage || "Ocurrió un error inesperado. Intenta de nuevo."}
+        </s-paragraph>
+      </s-banner>
+    );
+  }
+
+  return (
+    <s-stack direction="block" gap="tight">
+      <s-stack direction="inline" gap="tight" alignment="center">
+        <s-spinner />
+        <s-text>
+          {label}
+          {total > 0 ? ` · ${processed} / ${total}` : ` · ${processed} procesados`}
+          {pct !== null ? ` (${pct}%)` : ""}
+        </s-text>
+      </s-stack>
+    </s-stack>
+  );
+}
+
+// Helper para revalidar la ruta actual cuando un job termina (refresca data
+// del loader sin reload completo).
+export function useRevalidateOnFinish() {
+  const revalidator = useRevalidator();
+  return () => revalidator.revalidate();
+}

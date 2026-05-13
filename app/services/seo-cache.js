@@ -1,25 +1,29 @@
 import prisma from "../db.server";
 import { analyzeProduct, FREE_PLAN_PRODUCT_LIMIT } from "./seo-analyzer";
 
-// TTL del cache de análisis SEO. Pasado este tiempo, el loader vuelve
-// a llamar a la Admin API. Ajustar si los merchants editan productos
-// muy seguido.
-export const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
+// Edad a partir de la cual consideramos el cache "stale" (servimos igual,
+// pero el loader dispara revalidación en background). Antes este TTL era
+// "todo o nada" y forzaba al loader a esperar al refetch; ahora siempre
+// servimos data si existe.
+export const CACHE_STALE_AFTER_MS = 60 * 60 * 1000; // 1 hora
 
-// Devuelve los items cacheados si existen, están frescos y corresponden al
-// plan actual. Si no, null. Pasar `currentPlan` ("free" | "pro") evita servir
-// cache stale tras un upgrade/downgrade.
+// Devuelve siempre los items cacheados si existen y corresponden al plan
+// actual, junto con `isStale` para que el loader decida si dispara una
+// revalidación en background. Pasar `currentPlan` ("free" | "pro") evita
+// servir cache stale tras un upgrade/downgrade.
 export async function getCachedItems(shop, currentPlan) {
   const row = await prisma.seoCache.findUnique({ where: { shop } });
   if (!row) return null;
 
-  const age = Date.now() - row.updatedAt.getTime();
-  if (age > CACHE_TTL_MS) return null;
-
   const parsed = JSON.parse(row.data);
   if (parsed.plan !== currentPlan) return null;
 
-  return { items: parsed.items, analyzedAt: row.updatedAt };
+  const age = Date.now() - row.updatedAt.getTime();
+  return {
+    items: parsed.items,
+    analyzedAt: row.updatedAt,
+    isStale: age > CACHE_STALE_AFTER_MS,
+  };
 }
 
 export async function setCachedItems(shop, items, plan) {
@@ -33,6 +37,33 @@ export async function setCachedItems(shop, items, plan) {
 
 export async function invalidateCache(shop) {
   await prisma.seoCache.deleteMany({ where: { shop } });
+}
+
+// Actualización granular: aplica `mutator(item)` solo a los items cuyo
+// productId está en `productIds`, reescribe el cache y deja el resto intacto.
+// Útil tras un fix individual o bulk: ya no hace falta invalidar todo el
+// catálogo y forzar un re-fetch completo en la próxima navegación.
+export async function updateCachedItems(shop, productIds, mutator) {
+  const row = await prisma.seoCache.findUnique({ where: { shop } });
+  if (!row) return false;
+
+  const parsed = JSON.parse(row.data);
+  const ids = new Set(productIds);
+  let changed = false;
+  parsed.items = parsed.items.map((item) => {
+    if (!ids.has(item.productId)) return item;
+    const updated = mutator(item);
+    changed = changed || updated !== item;
+    return updated;
+  });
+
+  if (!changed) return false;
+
+  await prisma.seoCache.update({
+    where: { shop },
+    data: { data: JSON.stringify(parsed) },
+  });
+  return true;
 }
 
 // Convierte productos crudos (de fetchAllProducts) en items canónicos
