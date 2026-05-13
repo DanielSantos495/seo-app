@@ -178,12 +178,15 @@ export default function Products() {
       if (summary) {
         setLastBulkSummary(summary);
         const errCount = summary.errors?.length || 0;
+        const totalImages = summary.totalImages || 0;
         const ok = (summary.totalProducts || 0) - errCount;
-        if (summary.totalImages === 0) {
+        if (totalImages === 0 && summary.totalProducts === 0) {
           shopify.toast.show("No había alt texts para agregar");
+        } else if (totalImages === 0) {
+          shopify.toast.show("Productos ya tenían alt — listado actualizado");
         } else {
           shopify.toast.show(
-            `Listo: ${ok} producto${ok === 1 ? "" : "s"} · ${summary.totalImages || 0} alt text${summary.totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
+            `Listo: ${ok} producto${ok === 1 ? "" : "s"} · ${totalImages} alt text${totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
             errCount ? { isError: true } : undefined,
           );
         }

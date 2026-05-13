@@ -14,11 +14,32 @@ export default function BulkFixSummaryBanner({ summary, onDismiss }) {
   const okCount = totalProducts - errors.length;
   const hasErrors = errors.length > 0;
   const isEmpty = totalImages === 0 && totalProducts === 0;
+  // Todos los productos ya tenían alt al momento del fetch (caso típico:
+  // imágenes compartidas que se arreglaron desde otro producto en el mismo
+  // job). El cache se sincroniza igual.
+  const isAlreadyOk =
+    totalImages === 0 && totalProducts > 0 && !hasErrors;
 
   if (isEmpty) {
     return (
       <s-banner tone="info" heading="Sin cambios">
         <s-paragraph>No había alt texts para agregar.</s-paragraph>
+        <s-button slot="primaryAction" onClick={onDismiss}>
+          Entendido
+        </s-button>
+      </s-banner>
+    );
+  }
+
+  if (isAlreadyOk) {
+    return (
+      <s-banner tone="success" heading="Listado actualizado">
+        <s-paragraph>
+          Esos {totalProducts} producto{totalProducts === 1 ? "" : "s"} ya{" "}
+          tenía{totalProducts === 1 ? "" : "n"} alt text en todas sus imágenes
+          (probablemente imágenes compartidas con productos arreglados en este
+          mismo job). Sincronizamos el listado.
+        </s-paragraph>
         <s-button slot="primaryAction" onClick={onDismiss}>
           Entendido
         </s-button>

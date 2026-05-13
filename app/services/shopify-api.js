@@ -209,6 +209,23 @@ export async function bulkFixAltTextsForProducts(
         if (onProgress) await onProgress({ processed, fixedProductIds });
         continue;
       }
+
+      // Caso "ya está OK": el cache lo listaba como elegible pero al fetch
+      // todas las imágenes ya tienen alt — pasa cuando una imagen compartida
+      // con otro producto recibió alt en un fix previo del mismo job. Lo
+      // incluimos en fixedProductIds para que updateCachedItems le borre
+      // el issue del listado (si no lo hacemos, el producto queda eternamente
+      // marcado como pendiente y el modal no se cierra).
+      const hasMissingAlt = (product.images || []).some(
+        (img) => !img.altText?.trim(),
+      );
+      if (!hasMissingAlt) {
+        fixedProductIds.push(gid);
+        processed++;
+        if (onProgress) await onProgress({ processed, fixedProductIds });
+        continue;
+      }
+
       const alts = generateAltTexts(product);
       if (alts.size === 0) {
         processed++;
