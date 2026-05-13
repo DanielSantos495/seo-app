@@ -1,3 +1,4 @@
+import prisma from "../db.server";
 import { authenticate } from "../shopify.server";
 import { findActiveJob, findJobById, serializeJob } from "../services/seo-job";
 
@@ -5,10 +6,13 @@ import { findActiveJob, findJobById, serializeJob } from "../services/seo-job";
 // progreso de un job. Soporta dos modos:
 //   - ?id=<jobId>  → estado de un job específico (lo usa el bulk fix tras
 //     submit del action que devuelve el jobId).
-//   - ?type=analysis|bulk_alt → último job activo del shop para ese tipo
-//     (lo usa el dashboard para detectar análisis en curso).
+//   - ?type=analysis|bulk_alt → último job del shop para ese tipo. Si hay
+//     uno activo lo devuelve; si no, devuelve el más reciente (cualquier
+//     status) para que el cliente detecte la transición done/failed —
+//     antes, si el job acababa entre polls (caso 200 productos en ~2 s),
+//     el cliente quedaba con el initialJob viejo y "Analizando…" eterno.
 //
-// Devuelve `null` si no hay job que reportar.
+// Devuelve `{ job: null }` solo si nunca hubo un job de ese tipo.
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
 
@@ -24,7 +28,13 @@ export const loader = async ({ request }) => {
   }
 
   if (type) {
-    const job = await findActiveJob(session.shop, type);
+    let job = await findActiveJob(session.shop, type);
+    if (!job) {
+      job = await prisma.seoJob.findFirst({
+        where: { shop: session.shop, type },
+        orderBy: { createdAt: "desc" },
+      });
+    }
     return { job: serializeJob(job) };
   }
 

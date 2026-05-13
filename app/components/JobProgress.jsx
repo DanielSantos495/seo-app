@@ -23,9 +23,14 @@ export function useJobPolling({
   const onFinishRef = useRef(onFinish);
   onFinishRef.current = onFinish;
 
-  // El job actual es el último del fetcher si llegó, o el initial.
-  const job = fetcher.data?.job || initialJob || null;
-  const isActive = job && (job.status === "pending" || job.status === "running");
+  // Una vez que el fetcher recibió respuesta, su valor manda — aunque sea
+  // null. Antes usábamos `fetcher.data?.job || initialJob`, lo que dejaba
+  // al cliente colgado con initialJob viejo si el job terminaba muy rápido
+  // y el polling devolvía null (porque findActiveJob descarta done/failed).
+  const job = fetcher.data
+    ? fetcher.data.job
+    : initialJob || null;
+  const isActive = !!(job && (job.status === "pending" || job.status === "running"));
 
   const url = byId
     ? `/api/job-status?id=${encodeURIComponent(byId)}`
@@ -47,10 +52,12 @@ export function useJobPolling({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, isActive, byType]);
 
-  // Detectar transición running → done/failed.
+  // Detectar transición active → no-active. Llamamos onFinish siempre que
+  // ocurra la transición, aunque `job` sea null (job desapareció / fue
+  // limpiado). Los callers deben tolerar `finalJob` null.
   const wasActiveRef = useRef(isActive);
   useEffect(() => {
-    if (wasActiveRef.current && !isActive && job) {
+    if (wasActiveRef.current && !isActive) {
       onFinishRef.current?.(job);
     }
     wasActiveRef.current = isActive;

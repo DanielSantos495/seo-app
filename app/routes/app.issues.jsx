@@ -208,17 +208,21 @@ export default function Issues() {
     byId: submittedJobId,
     byType: submittedJobId ? null : "bulk_alt",
     onFinish: (finalJob) => {
-      const summary = finalJob.resultSummary || {};
-      setLastBulkSummary(summary);
-      const errCount = summary.errors?.length || 0;
-      const ok = (summary.totalProducts || 0) - errCount;
-      if (summary.totalImages === 0) {
-        shopify.toast.show("No había alt texts para agregar");
-      } else {
-        shopify.toast.show(
-          `Listo: ${ok} producto${ok === 1 ? "" : "s"} · ${summary.totalImages || 0} alt text${summary.totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
-          errCount ? { isError: true } : undefined,
-        );
+      // finalJob puede ser null si el polling no llegó al resultado.
+      // Igual revalidamos para que el loader refresque con data nueva.
+      const summary = finalJob?.resultSummary || null;
+      if (summary) {
+        setLastBulkSummary(summary);
+        const errCount = summary.errors?.length || 0;
+        const ok = (summary.totalProducts || 0) - errCount;
+        if (summary.totalImages === 0) {
+          shopify.toast.show("No había alt texts para agregar");
+        } else {
+          shopify.toast.show(
+            `Listo: ${ok} producto${ok === 1 ? "" : "s"} · ${summary.totalImages || 0} alt text${summary.totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
+            errCount ? { isError: true } : undefined,
+          );
+        }
       }
       revalidator.revalidate();
     },
