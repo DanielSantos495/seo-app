@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Form,
   useActionData,
+  useFetcher,
   useLoaderData,
   useLocation,
   useNavigation,
@@ -12,7 +13,6 @@ import { authenticate } from "../shopify.server";
 import {
   bulkFixAltTextsForProducts,
   fetchAllProducts,
-  previewAltTextsForProducts,
 } from "../services/shopify-api";
 import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
 import {
@@ -39,7 +39,7 @@ function getEligibleGids(items) {
 export const loader = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
 
-  const isPro = await checkIsPro(billing);
+  const isPro = await checkIsPro(billing, session.shop);
   const currentPlan = isPro ? "pro" : "free";
 
   let cached = await getCachedItems(session.shop, currentPlan);
@@ -53,15 +53,10 @@ export const loader = async ({ request }) => {
   }
 
   const eligibleGids = getEligibleGids(cached.items);
-  let samples = [];
-  if (eligibleGids.length > 0) {
-    samples = await previewAltTextsForProducts(
-      admin,
-      eligibleGids.slice(0, BULK_CAP),
-      { limit: 3 },
-    );
-  }
 
+  // Nota: ya no resolvemos `samples` acá. Se cargan on-demand desde
+  // /api/bulk-preview cuando el merchant abre el modal — ahorra 3 round-trips
+  // por navegación.
   return {
     items: cached.items,
     planLimit: FREE_PLAN_PRODUCT_LIMIT,
@@ -71,7 +66,6 @@ export const loader = async ({ request }) => {
       eligible: eligibleGids.length,
       processable: Math.min(eligibleGids.length, BULK_CAP),
       exceedsCap: eligibleGids.length > BULK_CAP,
-      samples,
     },
   };
 };
@@ -79,7 +73,7 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
 
-  const isPro = await checkIsPro(billing);
+  const isPro = await checkIsPro(billing, session.shop);
   if (!isPro) {
     return new Response(
       JSON.stringify({ error: "Esta acción es solo para plan Pro" }),
@@ -126,6 +120,10 @@ export default function Products() {
   const actionData = useActionData();
   const navigation = useNavigation();
   const shopify = useAppBridge();
+  // Fetcher para cargar los samples del bulk fix on-demand al abrir el modal.
+  const previewFetcher = useFetcher();
+  const samples = previewFetcher.data?.samples;
+  const isLoadingPreview = previewFetcher.state === "loading";
   // Upgrade va por GET con full-page reload (`target="_top"`) para evitar el bug
   // de single-fetch + billing.request. Conservamos los query params de Shopify.
   const location = useLocation();
@@ -239,6 +237,12 @@ export default function Products() {
                 variant="primary"
                 command="--show"
                 commandFor={isPro ? "bulk-alt-modal" : "upgrade-modal"}
+                onClick={() => {
+                  // Solo cargamos preview si es Pro y aún no lo cargamos.
+                  if (isPro && !samples && previewFetcher.state === "idle") {
+                    previewFetcher.load("/api/bulk-preview");
+                  }
+                }}
               >
                 {isPro
                   ? `Arreglar alt texts (${bulkFix.processable})`
@@ -332,10 +336,16 @@ export default function Products() {
               </s-paragraph>
             </s-banner>
           )}
-          {bulkFix.samples.length > 0 && (
+          {isLoadingPreview && (
+            <s-stack direction="inline" gap="tight" alignment="center">
+              <s-spinner />
+              <s-text tone="subdued">Generando ejemplos…</s-text>
+            </s-stack>
+          )}
+          {!isLoadingPreview && samples && samples.length > 0 && (
             <s-stack direction="block" gap="tight">
               <s-text tone="subdued">Ejemplos del patrón:</s-text>
-              {bulkFix.samples.map((s, idx) => (
+              {samples.map((s, idx) => (
                 <s-text key={idx}>
                   {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
                 </s-text>

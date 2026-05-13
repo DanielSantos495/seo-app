@@ -1,5 +1,6 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { invalidatePlanCache } from "../services/plan-cache";
 
 // Webhook que dispara Shopify cuando cambia el estado de la suscripción
 // (activación tras pago, cancelación, fin de trial, etc.). Invalidamos el cache
@@ -10,6 +11,7 @@ export const action = async ({ request }) => {
 
   console.log(`Received ${topic} webhook for ${shop}`);
 
+  invalidatePlanCache(shop);
   await db.seoCache.deleteMany({ where: { shop } });
 
   return new Response();

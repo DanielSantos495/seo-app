@@ -2,12 +2,26 @@ import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
+import { checkIsPro } from "../services/billing";
+import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
+import { NavLink } from "../components/NavLink";
 
+// El layout autentica una sola vez y resuelve `isPro` (memoizado en
+// plan-cache). Los hijos consumen estos valores con `useRouteLoaderData
+// ("routes/app")` y NO vuelven a llamar a `checkIsPro` ni a `authenticate`.
+// Resultado: cada cambio de tab evita 1-2 round-trips a Shopify.
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session, billing } = await authenticate.admin(request);
+  const isPro = await checkIsPro(billing, session.shop);
 
-  // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return {
+    // eslint-disable-next-line no-undef
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    shop: session.shop,
+    shopHandle: session.shop.replace(/\.myshopify\.com$/, ""),
+    isPro,
+    planLimit: FREE_PLAN_PRODUCT_LIMIT,
+  };
 };
 
 export default function App() {
@@ -16,9 +30,9 @@ export default function App() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
-        <s-link href="/app">Dashboard</s-link>
-        <s-link href="/app/products">Productos</s-link>
-        <s-link href="/app/issues">Issues</s-link>
+        <NavLink to="/app">Dashboard</NavLink>
+        <NavLink to="/app/products">Productos</NavLink>
+        <NavLink to="/app/issues">Issues</NavLink>
       </s-app-nav>
       <Outlet />
     </AppProvider>

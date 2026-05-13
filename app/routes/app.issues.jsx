@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Form,
   useActionData,
+  useFetcher,
   useLoaderData,
   useLocation,
   useNavigation,
@@ -12,7 +13,6 @@ import { authenticate } from "../shopify.server";
 import {
   bulkFixAltTextsForProducts,
   fetchAllProducts,
-  previewAltTextsForProducts,
 } from "../services/shopify-api";
 import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
 import {
@@ -93,7 +93,7 @@ function groupIssuesByField(items) {
 export const loader = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
 
-  const isPro = await checkIsPro(billing);
+  const isPro = await checkIsPro(billing, session.shop);
   const currentPlan = isPro ? "pro" : "free";
 
   let cached = await getCachedItems(session.shop, currentPlan);
@@ -108,15 +108,9 @@ export const loader = async ({ request }) => {
 
   const groups = groupIssuesByField(cached.items);
   const eligibleAltGids = getEligibleAltGids(cached.items);
-  let samples = [];
-  if (eligibleAltGids.length > 0) {
-    samples = await previewAltTextsForProducts(
-      admin,
-      eligibleAltGids.slice(0, BULK_CAP),
-      { limit: 3 },
-    );
-  }
 
+  // Los samples se cargan on-demand desde /api/bulk-preview cuando el merchant
+  // abre el modal — antes los resolvíamos en cada loader inútilmente.
   return {
     groups,
     analyzedAt: cached.analyzedAt.toISOString(),
@@ -125,7 +119,6 @@ export const loader = async ({ request }) => {
       eligible: eligibleAltGids.length,
       processable: Math.min(eligibleAltGids.length, BULK_CAP),
       exceedsCap: eligibleAltGids.length > BULK_CAP,
-      samples,
     },
   };
 };
@@ -133,7 +126,7 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
 
-  const isPro = await checkIsPro(billing);
+  const isPro = await checkIsPro(billing, session.shop);
   if (!isPro) {
     return new Response(
       JSON.stringify({ error: "Esta acción es solo para plan Pro" }),
@@ -176,6 +169,10 @@ export default function Issues() {
   const upgradeUrl = `/app/upgrade${location.search}`;
   const isApplying = navigation.state === "submitting";
   const [expandedGroups, setExpandedGroups] = useState({});
+  // Fetcher para cargar samples del bulk fix on-demand al abrir el modal.
+  const previewFetcher = useFetcher();
+  const samples = previewFetcher.data?.samples;
+  const isLoadingPreview = previewFetcher.state === "loading";
 
   const toggleExpand = (field) =>
     setExpandedGroups((s) => ({ ...s, [field]: !s[field] }));
@@ -279,6 +276,11 @@ export default function Issues() {
                   variant="primary"
                   command="--show"
                   commandFor={isPro ? "bulk-alt-modal" : "upgrade-modal"}
+                  onClick={() => {
+                    if (isPro && !samples && previewFetcher.state === "idle") {
+                      previewFetcher.load("/api/bulk-preview");
+                    }
+                  }}
                 >
                   {isPro
                     ? `Arreglar todos (${bulkFix.processable})`
@@ -306,10 +308,16 @@ export default function Issues() {
               </s-paragraph>
             </s-banner>
           )}
-          {bulkFix.samples.length > 0 && (
+          {isLoadingPreview && (
+            <s-stack direction="inline" gap="tight" alignment="center">
+              <s-spinner />
+              <s-text tone="subdued">Generando ejemplos…</s-text>
+            </s-stack>
+          )}
+          {!isLoadingPreview && samples && samples.length > 0 && (
             <s-stack direction="block" gap="tight">
               <s-text tone="subdued">Ejemplos del patrón:</s-text>
-              {bulkFix.samples.map((s, idx) => (
+              {samples.map((s, idx) => (
                 <s-text key={idx}>
                   {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
                 </s-text>

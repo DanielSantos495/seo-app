@@ -14,7 +14,7 @@ import {
 } from "../services/seo-cache";
 import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
-import { buildCsv } from "../services/csv-export";
+import { PrefetchButton, PrefetchClickable } from "../components/NavLink";
 
 export const loader = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
@@ -26,7 +26,7 @@ export const loader = async ({ request }) => {
     await invalidateCache(session.shop);
   }
 
-  const isPro = await checkIsPro(billing);
+  const isPro = await checkIsPro(billing, session.shop);
   const currentPlan = isPro ? "pro" : "free";
 
   let cached = await getCachedItems(session.shop, currentPlan);
@@ -49,15 +49,15 @@ export const loader = async ({ request }) => {
     .sort((a, b) => a.score - b.score)
     .slice(0, 5);
 
+  // Ya no enviamos `exportItems` al cliente: la descarga del CSV pasa por
+  // /api/export.csv que genera el archivo server-side y lo stream-ea. Ahorra
+  // MBs de payload en tiendas Pro grandes.
   return {
     report,
     worstProducts,
     planLimit: FREE_PLAN_PRODUCT_LIMIT,
     analyzedAt: cached.analyzedAt.toISOString(),
     isPro,
-    // Items completos (no-locked) para el export CSV client-side.
-    exportItems: cached.items.filter((i) => !i.locked),
-    shopHandle: session.shop.replace(/\.myshopify\.com$/, ""),
   };
 };
 
@@ -78,16 +78,23 @@ function formatRelativeTime(isoDate) {
   return `hace ${days} d`;
 }
 
-function downloadCsv(items, shopHandle) {
-  const csv = buildCsv(items);
-  // BOM U+FEFF para que Excel detecte UTF-8 (acentos, ñ).
-  const blob = new Blob(["﻿", csv], {
-    type: "text/csv;charset=utf-8",
-  });
+async function downloadCsv() {
+  // App Bridge React 4 adjunta automáticamente el session token a `fetch`
+  // hacia rutas same-origin. Si en algún momento el patch falla, fallback
+  // a `target="_top"` con `id_token` en query.
+  const response = await fetch("/api/export.csv");
+  if (!response.ok) {
+    throw new Error(`Export failed: ${response.status}`);
+  }
+  const blob = await response.blob();
+  const filename =
+    response.headers
+      .get("Content-Disposition")
+      ?.match(/filename="(.+)"/)?.[1] || "seo-report.csv";
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `seo-report-${shopHandle}-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -95,15 +102,8 @@ function downloadCsv(items, shopHandle) {
 }
 
 export default function Index() {
-  const {
-    report,
-    worstProducts,
-    planLimit,
-    analyzedAt,
-    isPro,
-    exportItems,
-    shopHandle,
-  } = useLoaderData();
+  const { report, worstProducts, planLimit, analyzedAt, isPro } =
+    useLoaderData();
   // Preservar los query params de Shopify (host, embedded, id_token...) en el
   // link al upgrade. Importante: el upgrade va por GET con full-page reload
   // (`target="_top"`) para evitar el bug de single-fetch + billing.request.
@@ -153,19 +153,16 @@ export default function Index() {
             Último análisis {formatRelativeTime(analyzedAt)}
           </s-text>
           <s-stack direction="inline" gap="base">
-            <s-button href="/app/products" variant="primary">
+            <PrefetchButton to="/app/products" variant="primary">
               Ver todos los productos
-            </s-button>
+            </PrefetchButton>
             <Form method="post">
               <s-button type="submit" variant="secondary">
                 Re-analizar ahora
               </s-button>
             </Form>
             {isPro ? (
-              <s-button
-                variant="secondary"
-                onClick={() => downloadCsv(exportItems, shopHandle)}
-              >
+              <s-button variant="secondary" onClick={() => downloadCsv()}>
                 Exportar CSV
               </s-button>
             ) : (
@@ -203,7 +200,7 @@ export default function Index() {
               </s-box>
             ))}
           </s-stack>
-          <s-button href="/app/issues">Ver issues agrupados por tipo</s-button>
+          <PrefetchButton to="/app/issues">Ver issues agrupados por tipo</PrefetchButton>
         </s-stack>
       </s-section>
 
@@ -211,9 +208,9 @@ export default function Index() {
         <s-section heading="Productos con peor SEO">
           <s-stack direction="block" gap="base">
             {worstProducts.map((product) => (
-              <s-clickable
+              <PrefetchClickable
                 key={product.productId}
-                href={`/app/products/${gidToNumericId(product.productId)}`}
+                to={`/app/products/${gidToNumericId(product.productId)}`}
                 padding="base"
                 borderWidth="base"
                 borderRadius="base"
@@ -229,7 +226,7 @@ export default function Index() {
                     </s-text>
                   </s-stack>
                 </s-stack>
-              </s-clickable>
+              </PrefetchClickable>
             ))}
           </s-stack>
         </s-section>

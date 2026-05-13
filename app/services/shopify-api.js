@@ -1,5 +1,10 @@
 // Queries GraphQL contra la Admin API de Shopify.
 // Mantener separadas del UI para poder testear el scoring sin red.
+//
+// Todas las llamadas pasan por `shopifyGraphql` (ver shopify-fetch.js) que
+// maneja rate-limit + retries de forma centralizada.
+
+import { shopifyGraphql } from "./shopify-fetch";
 
 // En API 2026-04 las imágenes viven bajo `media` (modelo unificado con
 // videos/3D). Para SEO solo nos interesan las MediaImage.
@@ -91,10 +96,9 @@ export async function fetchAllProducts(admin, { limit } = {}) {
   let hasNextPage = true;
 
   while (hasNextPage) {
-    const response = await admin.graphql(GET_PRODUCTS_SEO_QUERY, {
+    const json = await shopifyGraphql(admin, GET_PRODUCTS_SEO_QUERY, {
       variables: { cursor },
     });
-    const json = await response.json();
     const page = json?.data?.products;
     if (!page) break;
 
@@ -112,10 +116,9 @@ export async function fetchAllProducts(admin, { limit } = {}) {
 
 // Trae un único producto por GID. Devuelve `null` si no existe.
 export async function fetchProductById(admin, gid) {
-  const response = await admin.graphql(GET_PRODUCT_SEO_QUERY, {
+  const json = await shopifyGraphql(admin, GET_PRODUCT_SEO_QUERY, {
     variables: { id: gid },
   });
-  const json = await response.json();
   const product = json?.data?.product;
   return product ? normalizeProduct(product) : null;
 }
@@ -171,17 +174,16 @@ export async function previewAltTextsForProducts(
   return samples;
 }
 
-// Bulk fix secuencial con throttle suave para no quemar el rate limit GraphQL
-// (~50 puntos/seg en Standard plan; ~40 puntos por producto).
-const BULK_THROTTLE_MS = 800;
-
+// Bulk fix secuencial. El throttle viejo de 800ms quedó obsoleto: ahora el
+// rate-limit lo maneja `shopifyGraphql` leyendo el bucket real de Shopify
+// (ver shopify-fetch.js). Esto baja el tiempo total ~30-40% cuando hay
+// capacidad y lo respeta cuando no la hay.
 export async function bulkFixAltTextsForProducts(admin, productGids) {
   const { generateAltTexts } = await import("./alt-text-generator");
   let totalImages = 0;
   const errors = [];
 
-  for (let i = 0; i < productGids.length; i++) {
-    const gid = productGids[i];
+  for (const gid of productGids) {
     try {
       const product = await fetchProductById(admin, gid);
       if (!product) continue;
@@ -198,9 +200,6 @@ export async function bulkFixAltTextsForProducts(admin, productGids) {
       }
     } catch (e) {
       errors.push({ productId: gid, message: e.message });
-    }
-    if (i < productGids.length - 1) {
-      await new Promise((r) => setTimeout(r, BULK_THROTTLE_MS));
     }
   }
 
@@ -224,10 +223,9 @@ export async function updateProductAltTexts(
 
   const media = entries.map(([id, alt]) => ({ id, alt }));
 
-  const response = await admin.graphql(PRODUCT_UPDATE_MEDIA_MUTATION, {
+  const json = await shopifyGraphql(admin, PRODUCT_UPDATE_MEDIA_MUTATION, {
     variables: { productId: productGid, media },
   });
-  const json = await response.json();
   const userErrors = json?.data?.productUpdateMedia?.mediaUserErrors || [];
   return { ok: userErrors.length === 0, userErrors };
 }

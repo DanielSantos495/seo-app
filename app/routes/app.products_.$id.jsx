@@ -21,7 +21,7 @@ import { invalidateCache } from "../services/seo-cache";
 import IssuesList from "../components/IssuesList";
 
 export const loader = async ({ request, params }) => {
-  const { admin, billing } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
 
   const gid = `gid://shopify/Product/${params.id}`;
   const product = await fetchProductById(admin, gid);
@@ -30,7 +30,7 @@ export const loader = async ({ request, params }) => {
   }
 
   const analysis = analyzeProduct(product);
-  const isPro = await checkIsPro(billing);
+  const isPro = await checkIsPro(billing, session.shop);
 
   // Pre-calculamos los alt texts propuestos para mostrar el preview en el modal
   // sin necesidad de re-calcular en el cliente.
@@ -48,7 +48,7 @@ export const loader = async ({ request, params }) => {
 export const action = async ({ request, params }) => {
   const { admin, session, billing } = await authenticate.admin(request);
 
-  const isPro = await checkIsPro(billing);
+  const isPro = await checkIsPro(billing, session.shop);
   if (!isPro) {
     return new Response(
       JSON.stringify({ error: "Esta acción es solo para plan Pro" }),
