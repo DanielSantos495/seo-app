@@ -25,16 +25,7 @@ import {
   startBulkAltJob,
 } from "../services/seo-job-runner";
 import { JobProgress, useJobPolling } from "../components/JobProgress";
-
-function getEligibleGids(items) {
-  return items
-    .filter(
-      (i) =>
-        !i.locked &&
-        i.issues?.some((iss) => iss.field === "images.altText"),
-    )
-    .map((i) => i.productId);
-}
+import BulkFixSummaryBanner from "../components/BulkFixSummaryBanner";
 
 export const loader = async ({ request }) => {
   const { admin, session, billing } = await authenticate.admin(request);
@@ -68,7 +59,8 @@ export const loader = async ({ request }) => {
     };
   }
 
-  const eligibleGids = getEligibleGids(cached.items);
+  // eligibleAltGids viene pre-computado del cache (Sprint 4).
+  const eligibleCount = cached.eligibleAltGids.length;
 
   return {
     analyzing: false,
@@ -80,10 +72,9 @@ export const loader = async ({ request }) => {
     isPro,
     isStale: cached.isStale,
     bulkFix: {
-      // Sin cap: el job procesa todos los elegibles. Mantenemos `eligible`
-      // como total y `processable` por compatibilidad con el modal.
-      eligible: eligibleGids.length,
-      processable: eligibleGids.length,
+      // Sin cap: el job procesa todos los elegibles.
+      eligible: eligibleCount,
+      processable: eligibleCount,
     },
   };
 };
@@ -101,12 +92,12 @@ export const action = async ({ request }) => {
     );
   }
 
-  // Recalcular elegibles con data fresca — no confiamos en lo que vino del cliente.
+  // Tomamos los elegibles directamente del cache pre-computado.
   const cached = await getCachedItems(session.shop, "pro");
   if (!cached) {
     return { ok: false, error: "Cache no disponible. Recargá la página." };
   }
-  const eligibleGids = getEligibleGids(cached.items);
+  const eligibleGids = cached.eligibleAltGids;
   if (eligibleGids.length === 0) {
     return { ok: true, jobId: null, empty: true };
   }
@@ -168,6 +159,10 @@ export default function Products() {
     onFinish: () => revalidator.revalidate(),
   });
 
+  // Banner persistente con el resumen del último bulk fix (se cierra
+  // manualmente con "Entendido"). El toast efímero se mantiene como heads-up.
+  const [lastBulkSummary, setLastBulkSummary] = useState(null);
+
   // Job de bulk fix activo.
   const { job: bulkJob, isActive: isBulkRunning } = useJobPolling({
     initialJob: submittedJobId
@@ -177,6 +172,7 @@ export default function Products() {
     byType: submittedJobId ? null : "bulk_alt",
     onFinish: (finalJob) => {
       const summary = finalJob.resultSummary || {};
+      setLastBulkSummary(summary);
       const errCount = summary.errors?.length || 0;
       const ok = (summary.totalProducts || 0) - errCount;
       if (summary.totalImages === 0) {
@@ -284,6 +280,13 @@ export default function Products() {
       <s-link slot="breadcrumbActions" href="/app">
         Dashboard
       </s-link>
+
+      {lastBulkSummary && (
+        <BulkFixSummaryBanner
+          summary={lastBulkSummary}
+          onDismiss={() => setLastBulkSummary(null)}
+        />
+      )}
 
       {isStale && isAnalyzing && (
         <s-banner tone="info" heading="Actualizando datos">

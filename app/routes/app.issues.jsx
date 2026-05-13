@@ -19,22 +19,13 @@ import {
 } from "../services/seo-job-runner";
 import { labelForField, mostSevere } from "../services/issue-labels";
 import { JobProgress, useJobPolling } from "../components/JobProgress";
+import BulkFixSummaryBanner from "../components/BulkFixSummaryBanner";
 
 const MAX_VISIBLE_PRODUCTS = 5;
 
 const IMPACT_TONE = { high: "critical", medium: "caution", low: "info" };
 const IMPACT_LABEL = { high: "Crítico", medium: "Medio", low: "Bajo" };
 const IMPACT_ORDER = { high: 0, medium: 1, low: 2 };
-
-function getEligibleAltGids(items) {
-  return items
-    .filter(
-      (i) =>
-        !i.locked &&
-        i.issues?.some((iss) => iss.field === "images.altText"),
-    )
-    .map((i) => i.productId);
-}
 
 function groupIssuesByField(items) {
   const groups = new Map();
@@ -115,8 +106,10 @@ export const loader = async ({ request }) => {
     };
   }
 
+  // groupIssuesByField sigue siendo on-demand: agrupar 10k items con
+  // affectedProducts es ~10ms y depende del filter UI; no pre-computamos.
   const groups = groupIssuesByField(cached.items);
-  const eligibleAltGids = getEligibleAltGids(cached.items);
+  const eligibleCount = cached.eligibleAltGids.length;
 
   return {
     analyzing: false,
@@ -127,8 +120,8 @@ export const loader = async ({ request }) => {
     isPro,
     isStale: cached.isStale,
     bulkFix: {
-      eligible: eligibleAltGids.length,
-      processable: eligibleAltGids.length,
+      eligible: eligibleCount,
+      processable: eligibleCount,
     },
   };
 };
@@ -150,7 +143,7 @@ export const action = async ({ request }) => {
   if (!cached) {
     return { ok: false, error: "Cache no disponible. Recargá la página." };
   }
-  const eligibleGids = getEligibleAltGids(cached.items);
+  const eligibleGids = cached.eligibleAltGids;
   if (eligibleGids.length === 0) {
     return { ok: true, jobId: null, empty: true };
   }
@@ -205,6 +198,8 @@ export default function Issues() {
     onFinish: () => revalidator.revalidate(),
   });
 
+  const [lastBulkSummary, setLastBulkSummary] = useState(null);
+
   // Job de bulk fix.
   const { job: bulkJob, isActive: isBulkRunning } = useJobPolling({
     initialJob: submittedJobId
@@ -214,6 +209,7 @@ export default function Issues() {
     byType: submittedJobId ? null : "bulk_alt",
     onFinish: (finalJob) => {
       const summary = finalJob.resultSummary || {};
+      setLastBulkSummary(summary);
       const errCount = summary.errors?.length || 0;
       const ok = (summary.totalProducts || 0) - errCount;
       if (summary.totalImages === 0) {
@@ -257,6 +253,13 @@ export default function Issues() {
       <s-link slot="breadcrumbActions" href="/app">
         Dashboard
       </s-link>
+
+      {lastBulkSummary && (
+        <BulkFixSummaryBanner
+          summary={lastBulkSummary}
+          onDismiss={() => setLastBulkSummary(null)}
+        />
+      )}
 
       {isStale && isAnalyzing && (
         <s-banner tone="info" heading="Actualizando datos">

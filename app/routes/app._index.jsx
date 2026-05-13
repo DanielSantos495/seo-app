@@ -7,14 +7,15 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import {
-  aggregateAnalyses,
-  FREE_PLAN_PRODUCT_LIMIT,
-} from "../services/seo-analyzer";
+import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
 import { getCachedItems, invalidateCache } from "../services/seo-cache";
 import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
-import { findActiveJob, serializeJob } from "../services/seo-job";
+import {
+  findActiveJob,
+  findRecentFailedJob,
+  serializeJob,
+} from "../services/seo-job";
 import { startAnalysisJob } from "../services/seo-job-runner";
 import { PrefetchButton, PrefetchClickable } from "../components/NavLink";
 import { JobProgress, useJobPolling } from "../components/JobProgress";
@@ -47,11 +48,17 @@ export const loader = async ({ request }) => {
     activeJob = await findActiveJob(session.shop, "analysis");
   }
 
+  // Si el último intento falló y no hay uno activo, mostramos banner accionable
+  // en lugar de degradar la UX silenciosamente.
+  const failedJob = activeJob
+    ? null
+    : await findRecentFailedJob(session.shop, "analysis");
+
   if (!cached) {
-    // Primer análisis en curso: no podemos calcular report aún.
     return {
       analyzing: true,
       job: serializeJob(activeJob),
+      failedJob: serializeJob(failedJob),
       report: null,
       worstProducts: [],
       planLimit: FREE_PLAN_PRODUCT_LIMIT,
@@ -61,21 +68,14 @@ export const loader = async ({ request }) => {
     };
   }
 
-  // Solo los items no-locked tienen scoring. El report del dashboard se calcula
-  // sobre ellos.
-  const unlocked = cached.items.filter((i) => !i.locked);
-  const report = aggregateAnalyses(unlocked);
-
-  const worstProducts = [...report.products]
-    .filter((p) => p.score < 100)
-    .sort((a, b) => a.score - b.score)
-    .slice(0, 5);
-
+  // Derivados pre-computados al guardar el cache — el dashboard ya no
+  // recalcula nada sobre `items`. Ver computeDerivatives en seo-cache.js.
   return {
     analyzing: false,
     job: serializeJob(activeJob),
-    report,
-    worstProducts,
+    failedJob: serializeJob(failedJob),
+    report: cached.summary,
+    worstProducts: cached.worstProducts,
     planLimit: FREE_PLAN_PRODUCT_LIMIT,
     analyzedAt: cached.analyzedAt.toISOString(),
     isPro,
@@ -131,6 +131,7 @@ export default function Index() {
   const {
     analyzing,
     job: initialJob,
+    failedJob,
     report,
     worstProducts,
     planLimit,
@@ -158,6 +159,19 @@ export default function Index() {
   if (analyzing && !report) {
     return (
       <s-page heading="SEO Analyzer">
+        {failedJob && (
+          <s-banner tone="critical" heading="El último análisis falló">
+            <s-paragraph>
+              {failedJob.errorMessage ||
+                "Hubo un error inesperado. Probá de nuevo."}
+            </s-paragraph>
+            <Form method="post" slot="primaryAction">
+              <s-button type="submit" variant="primary">
+                Reintentar análisis
+              </s-button>
+            </Form>
+          </s-banner>
+        )}
         <s-section heading="Analizando tu tienda">
           <s-stack direction="block" gap="base">
             <s-paragraph>
@@ -174,6 +188,20 @@ export default function Index() {
 
   return (
     <s-page heading="SEO Analyzer">
+      {failedJob && !isActive && (
+        <s-banner tone="critical" heading="El último análisis falló">
+          <s-paragraph>
+            Estamos mostrando datos del análisis anterior.{" "}
+            {failedJob.errorMessage ||
+              "Hubo un error inesperado al refrescar."}
+          </s-paragraph>
+          <Form method="post" slot="primaryAction">
+            <s-button type="submit" variant="primary">
+              Reintentar
+            </s-button>
+          </Form>
+        </s-banner>
+      )}
       {isStale && isActive && (
         <s-banner tone="info" heading="Actualizando datos">
           <s-paragraph>

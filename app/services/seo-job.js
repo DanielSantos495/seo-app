@@ -111,3 +111,34 @@ export function serializeJob(job) {
 export async function findJobById(jobId) {
   return prisma.seoJob.findUnique({ where: { id: jobId } });
 }
+
+// Devuelve el último job failed reciente para mostrar un banner accionable.
+// "Reciente" = última hora. Si el merchant ya volvió a disparar uno y completó,
+// no queremos seguir mostrando el error viejo.
+const RECENT_WINDOW_MS = 60 * 60 * 1000;
+
+export async function findRecentFailedJob(shop, type) {
+  const job = await prisma.seoJob.findFirst({
+    where: {
+      shop,
+      type,
+      status: "failed",
+      finishedAt: { gte: new Date(Date.now() - RECENT_WINDOW_MS) },
+    },
+    orderBy: { finishedAt: "desc" },
+  });
+  if (!job) return null;
+
+  // Si después hubo uno OK, descartamos el failed (ya se recuperó).
+  const newerDone = await prisma.seoJob.findFirst({
+    where: {
+      shop,
+      type,
+      status: "done",
+      finishedAt: { gt: job.finishedAt },
+    },
+    select: { id: true },
+  });
+  if (newerDone) return null;
+  return job;
+}

@@ -1,29 +1,72 @@
+import { useEffect } from "react";
+import { useLoaderData } from "react-router";
 import { authenticate, PRO_PLAN } from "../shopify.server";
 import { BILLING_IS_TEST } from "../services/billing";
 
-// Disparamos `billing.request()` desde el loader (no action) para evitar el bug
-// de single-fetch en React Router 7: cuando se invoca desde un POST, el redirect
-// que billing.request emite se trunca a 401. Con full-page GET el 302 viaja
-// normalmente. Ver issue Shopify/shopify-app-js#1976.
+// El loader intercepta el redirect que lanza `billing.request` y captura la
+// URL de confirmación, devolviéndola al componente en lugar de redirigir
+// inmediatamente. Esto nos deja renderizar una pantalla intermedia con
+// spinner antes de mandar al merchant a la pasarela de Shopify — en vez de
+// pantalla blanca durante 1-2 s.
+//
+// Nota sobre target="_top": como el botón fuerza navegación top-level, la
+// página que servimos acá ocupa toda la ventana (no iframe). El redirect
+// client-side ocurre desde esa misma ventana.
 export const loader = async ({ request }) => {
   const { billing } = await authenticate.admin(request);
 
   // eslint-disable-next-line no-undef
   const returnUrl = `${process.env.SHOPIFY_APP_URL}/app?upgraded=1`;
 
-  await billing.request({
-    plan: PRO_PLAN,
-    isTest: BILLING_IS_TEST,
-    returnUrl,
-  });
+  try {
+    await billing.request({
+      plan: PRO_PLAN,
+      isTest: BILLING_IS_TEST,
+      returnUrl,
+    });
+  } catch (response) {
+    // El SDK lanza un Response 302 con Location apuntando a la pasarela.
+    if (response instanceof Response && response.status >= 300 && response.status < 400) {
+      const confirmationUrl = response.headers.get("Location");
+      if (confirmationUrl) {
+        return { confirmationUrl };
+      }
+    }
+    throw response;
+  }
 
-  // billing.request lanza redirect; defensivo.
-  return null;
+  // Si billing.request no lanzó (caso raro: ya hay subscripción activa),
+  // volvemos al dashboard.
+  return { confirmationUrl: "/app?upgraded=1" };
 };
 
-// Defensivo: si por algún motivo el loader no redirige y React Router intenta
-// renderizar el componente, devolvemos null en lugar de undefined para evitar
-// que se serialice como objeto.
 export default function Upgrade() {
-  return null;
+  const { confirmationUrl } = useLoaderData();
+
+  useEffect(() => {
+    if (!confirmationUrl) return;
+    // Pequeño delay para que el usuario alcance a ver el mensaje antes del
+    // redirect. La pasarela de Shopify suele tardar 1-2s en cargar — sin
+    // esto, el merchant solo ve pantalla blanca.
+    const timer = setTimeout(() => {
+      window.location.href = confirmationUrl;
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [confirmationUrl]);
+
+  return (
+    <s-page heading="Redirigiendo a Shopify">
+      <s-section>
+        <s-stack direction="block" gap="base" alignment="center">
+          <s-spinner />
+          <s-heading>Te estamos llevando a la pasarela de pagos…</s-heading>
+          <s-paragraph tone="subdued">
+            Vas a aprobar el cobro en la página oficial de Shopify. Si no te
+            redirige en unos segundos,{" "}
+            <s-link href={confirmationUrl}>haz click acá</s-link>.
+          </s-paragraph>
+        </s-stack>
+      </s-section>
+    </s-page>
+  );
 }
