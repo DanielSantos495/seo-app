@@ -1,3 +1,4 @@
+/* eslint-env node */
 // Script de testing: vacía el alt text de todas las imágenes de los productos
 // de una tienda dev para poder probar el bulk fix de la app rápido.
 //
@@ -127,16 +128,20 @@ async function main() {
   );
 
   let cursor = null;
+  let hasNext = true;
   let processedProducts = 0;
   let clearedAlts = 0;
   let skippedProducts = 0;
 
-  outer: while (true) {
+  outer: while (hasNext) {
     const res = await gql(endpoint, session.accessToken, GET_PRODUCTS, { cursor });
     const page = res.data.products;
 
     for (const edge of page.edges) {
-      if (limit && processedProducts >= limit) break outer;
+      if (limit && processedProducts >= limit) {
+        hasNext = false;
+        break outer;
+      }
       const product = edge.node;
       processedProducts++;
 
@@ -180,7 +185,7 @@ async function main() {
       }
     }
 
-    if (!page.pageInfo.hasNextPage) break;
+    hasNext = page.pageInfo.hasNextPage;
     cursor = page.pageInfo.endCursor;
   }
 
