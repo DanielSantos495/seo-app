@@ -31,6 +31,8 @@ model Session {
   emailVerified Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+
+  @@index([shop])
 }
 
 // Cache del último análisis SEO completo por tienda.

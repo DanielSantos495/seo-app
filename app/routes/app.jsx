@@ -1,10 +1,17 @@
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import {
+  Outlet,
+  useLoaderData,
+  useLocation,
+  useNavigation,
+  useRouteError,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
 import { checkIsPro } from "../services/billing";
 import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
 import { NavLink } from "../components/NavLink";
+import { RouteSkeleton } from "../components/RouteSkeleton";
 
 // El layout autentica una sola vez y resuelve `isPro` (memoizado en
 // plan-cache). Los hijos consumen estos valores con `useRouteLoaderData
@@ -26,6 +33,17 @@ export const loader = async ({ request }) => {
 
 export default function App() {
   const { apiKey } = useLoaderData();
+  const navigation = useNavigation();
+  const location = useLocation();
+
+  // Si estamos navegando a OTRA ruta, pintamos el skeleton del destino en
+  // lugar del contenido viejo. Esto convierte "pantalla congelada" en
+  // "navegación percibida instantánea". `navigation.location` solo está
+  // poblado mientras hay una transición en curso.
+  const isNavigatingAway =
+    navigation.state === "loading" &&
+    navigation.location &&
+    navigation.location.pathname !== location.pathname;
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -34,7 +52,11 @@ export default function App() {
         <NavLink to="/app/products">Productos</NavLink>
         <NavLink to="/app/issues">Issues</NavLink>
       </s-app-nav>
-      <Outlet />
+      {isNavigatingAway ? (
+        <RouteSkeleton path={navigation.location.pathname} />
+      ) : (
+        <Outlet />
+      )}
     </AppProvider>
   );
 }

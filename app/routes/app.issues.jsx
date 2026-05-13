@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useFetcher,
   useLoaderData,
@@ -11,6 +11,7 @@ import { authenticate } from "../shopify.server";
 import { getCachedItems } from "../services/seo-cache";
 import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
+import { resizeCdnUrl } from "../services/image-url";
 import { findActiveJob, serializeJob } from "../services/seo-job";
 import {
   startAnalysisJob,
@@ -227,10 +228,13 @@ export default function Issues() {
     },
   });
 
+  // Ref para no duplicar toast si el loader revalida con el mismo actionData.
+  const errorToastRef = useRef(null);
   useEffect(() => {
-    if (bulkActionData?.error) {
-      shopify.toast.show(`Error: ${bulkActionData.error}`, { isError: true });
-    }
+    if (!bulkActionData?.error) return;
+    if (errorToastRef.current === bulkActionData) return;
+    errorToastRef.current = bulkActionData;
+    shopify.toast.show(`Error: ${bulkActionData.error}`, { isError: true });
   }, [bulkActionData, shopify]);
 
   const isApplying = bulkFetcher.state !== "idle" || isBulkRunning;
@@ -313,9 +317,10 @@ export default function Issues() {
                     <s-stack direction="inline" gap="base" alignment="center">
                       {p.thumbnailUrl && (
                         <s-thumbnail
-                          src={p.thumbnailUrl}
+                          src={resizeCdnUrl(p.thumbnailUrl, 80)}
                           alt={p.title}
                           size="small"
+                          loading="lazy"
                         />
                       )}
                       <s-text>{p.title}</s-text>

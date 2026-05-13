@@ -5,7 +5,10 @@ import { createReadableStreamFromReadable } from "@react-router/node";
 import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 
-export const streamTimeout = 5000;
+// 10s da margen para loaders que esperan un primer batch de Shopify (raro
+// gracias al stale-while-revalidate, pero protegemos casos de cache miss
+// + red lenta). React aborta el render si lo excedemos.
+export const streamTimeout = 10000;
 
 export default async function handleRequest(
   request,
@@ -44,8 +47,8 @@ export default async function handleRequest(
       },
     );
 
-    // Automatically timeout the React renderer after 6 seconds, which ensures
-    // React has enough time to flush down the rejected boundary contents
+    // Automatically timeout the React renderer después de streamTimeout +1s,
+    // dándole a React tiempo de flush-ear el contenido del error boundary.
     setTimeout(abort, streamTimeout + 1000);
   });
 }

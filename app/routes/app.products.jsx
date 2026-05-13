@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   useFetcher,
   useLoaderData,
@@ -12,6 +18,7 @@ import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
 import { getCachedItems } from "../services/seo-cache";
 import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
+import { resizeCdnUrl } from "../services/image-url";
 import { findActiveJob, serializeJob } from "../services/seo-job";
 import {
   startAnalysisJob,
@@ -184,20 +191,32 @@ export default function Products() {
     },
   });
 
-  // Si la action devolvió error.
+  // Si la action devolvió error. Ref para no duplicar toast en revalidaciones.
+  const errorToastRef = useRef(null);
   useEffect(() => {
-    if (bulkActionData?.error) {
-      shopify.toast.show(`Error: ${bulkActionData.error}`, { isError: true });
-    }
+    if (!bulkActionData?.error) return;
+    if (errorToastRef.current === bulkActionData) return;
+    errorToastRef.current = bulkActionData;
+    shopify.toast.show(`Error: ${bulkActionData.error}`, { isError: true });
   }, [bulkActionData, shopify]);
 
   const isApplying = bulkFetcher.state !== "idle" || isBulkRunning;
 
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState("worst");
+  const [page, setPage] = useState(1);
+  // useDeferredValue evita filtrar el catálogo en cada keystroke — React
+  // mantiene la UI receptiva y filtra cuando el render principal está libre.
+  const deferredQuery = useDeferredValue(query);
+
+  // Resetear página cuando cambia el filtro/orden — si estás en la pág 5 y
+  // buscás algo que solo deja 30 items, no quedás "fuera de rango".
+  useEffect(() => {
+    setPage(1);
+  }, [deferredQuery, sortKey]);
 
   const displayed = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     const filtered = q
       ? items.filter(
           (item) =>
@@ -234,9 +253,17 @@ export default function Products() {
         break;
     }
     return sorted;
-  }, [items, query, sortKey]);
+  }, [items, deferredQuery, sortKey]);
 
   const lockedCount = items.filter((i) => i.locked).length;
+
+  // Paginación cliente: renderizar 2k+ filas a la vez congela el navegador.
+  // 50 por página + controles son suficientes y no requieren librerías.
+  const PAGE_SIZE = 50;
+  const totalPages = Math.max(1, Math.ceil(displayed.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const pageRows = displayed.slice(pageStart, pageStart + PAGE_SIZE);
 
   // Primer análisis en curso: sin items, solo mostramos progreso.
   if (analyzing) {
@@ -329,59 +356,85 @@ export default function Products() {
               </s-paragraph>
             </s-banner>
           ) : (
-            <s-table>
-              <s-table-header-row>
-                <s-table-header>Producto</s-table-header>
-                <s-table-header>Score</s-table-header>
-                <s-table-header>Issues</s-table-header>
-                <s-table-header>Acción</s-table-header>
-              </s-table-header-row>
-              <s-table-body>
-                {displayed.map((item) => (
-                  <s-table-row key={item.productId}>
-                    <s-table-cell>
-                      <s-stack direction="inline" gap="base" alignment="center">
-                        {item.thumbnailUrl && (
-                          <s-thumbnail
-                            src={item.thumbnailUrl}
-                            alt={item.thumbnailAlt}
-                            size="small"
-                          />
-                        )}
-                        <s-stack direction="block" gap="tight">
-                          <s-text>{item.title}</s-text>
-                          <s-text tone="subdued">{item.handle}</s-text>
+            <>
+              <s-table>
+                <s-table-header-row>
+                  <s-table-header>Producto</s-table-header>
+                  <s-table-header>Score</s-table-header>
+                  <s-table-header>Issues</s-table-header>
+                  <s-table-header>Acción</s-table-header>
+                </s-table-header-row>
+                <s-table-body>
+                  {pageRows.map((item) => (
+                    <s-table-row key={item.productId}>
+                      <s-table-cell>
+                        <s-stack direction="inline" gap="base" alignment="center">
+                          {item.thumbnailUrl && (
+                            <s-thumbnail
+                              src={resizeCdnUrl(item.thumbnailUrl, 80)}
+                              alt={item.thumbnailAlt}
+                              size="small"
+                              loading="lazy"
+                            />
+                          )}
+                          <s-stack direction="block" gap="tight">
+                            <s-text>{item.title}</s-text>
+                            <s-text tone="subdued">{item.handle}</s-text>
+                          </s-stack>
                         </s-stack>
-                      </s-stack>
-                    </s-table-cell>
-                    <s-table-cell>
-                      <ScoreBadge score={item.score} locked={item.locked} />
-                    </s-table-cell>
-                    <s-table-cell>
-                      <IssuesSummary issues={item.issues} locked={item.locked} />
-                    </s-table-cell>
-                    <s-table-cell>
-                      {item.locked ? (
-                        <s-button
-                          variant="tertiary"
-                          command="--show"
-                          commandFor="upgrade-modal"
-                        >
-                          Desbloquear
-                        </s-button>
-                      ) : (
-                        <s-button
-                          variant="tertiary"
-                          href={`/app/products/${gidToNumericId(item.productId)}`}
-                        >
-                          Ver detalle
-                        </s-button>
-                      )}
-                    </s-table-cell>
-                  </s-table-row>
-                ))}
-              </s-table-body>
-            </s-table>
+                      </s-table-cell>
+                      <s-table-cell>
+                        <ScoreBadge score={item.score} locked={item.locked} />
+                      </s-table-cell>
+                      <s-table-cell>
+                        <IssuesSummary issues={item.issues} locked={item.locked} />
+                      </s-table-cell>
+                      <s-table-cell>
+                        {item.locked ? (
+                          <s-button
+                            variant="tertiary"
+                            command="--show"
+                            commandFor="upgrade-modal"
+                          >
+                            Desbloquear
+                          </s-button>
+                        ) : (
+                          <s-button
+                            variant="tertiary"
+                            href={`/app/products/${gidToNumericId(item.productId)}`}
+                          >
+                            Ver detalle
+                          </s-button>
+                        )}
+                      </s-table-cell>
+                    </s-table-row>
+                  ))}
+                </s-table-body>
+              </s-table>
+
+              {totalPages > 1 && (
+                <s-stack direction="inline" gap="base" alignment="center">
+                  <s-button
+                    variant="tertiary"
+                    {...(currentPage === 1 ? { disabled: true } : {})}
+                    onClick={() => setPage(currentPage - 1)}
+                  >
+                    Anterior
+                  </s-button>
+                  <s-text tone="subdued">
+                    Página {currentPage} de {totalPages} · {displayed.length}{" "}
+                    producto{displayed.length === 1 ? "" : "s"}
+                  </s-text>
+                  <s-button
+                    variant="tertiary"
+                    {...(currentPage === totalPages ? { disabled: true } : {})}
+                    onClick={() => setPage(currentPage + 1)}
+                  >
+                    Siguiente
+                  </s-button>
+                </s-stack>
+              )}
+            </>
           )}
         </s-stack>
       </s-section>

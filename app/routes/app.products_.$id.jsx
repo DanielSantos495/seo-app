@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   Form,
   useActionData,
@@ -16,6 +16,7 @@ import {
 import { analyzeProduct } from "../services/seo-analyzer";
 import { generateAltTexts } from "../services/alt-text-generator";
 import { productAdminUrl } from "../services/admin-links";
+import { resizeCdnUrl } from "../services/image-url";
 import { checkIsPro } from "../services/billing";
 import { updateCachedItems } from "../services/seo-cache";
 import IssuesList from "../components/IssuesList";
@@ -113,9 +114,13 @@ export default function ProductDetail() {
   const upgradeUrl = `/app/upgrade${location.search}`;
   const isApplying = navigation.state === "submitting";
 
-  // Toast cuando la acción termina con éxito (o error).
+  // Toast cuando la acción termina. Usamos ref para asegurar que cada
+  // actionData solo dispara UN toast (si el componente remonta o el loader
+  // revalida, el efecto podría correr de nuevo con el mismo data).
+  const shownToastRef = useRef(null);
   useEffect(() => {
-    if (!actionData) return;
+    if (!actionData || shownToastRef.current === actionData) return;
+    shownToastRef.current = actionData;
     if (actionData.ok) {
       shopify.toast.show(
         actionData.count === 0
@@ -144,9 +149,10 @@ export default function ProductDetail() {
         <s-stack direction="inline" gap="large" alignment="center">
           {featured && (
             <s-thumbnail
-              src={featured.url}
+              src={resizeCdnUrl(featured.url, 300)}
               alt={featured.altText || product.title}
               size="large"
+              loading="lazy"
             />
           )}
           <s-stack direction="block" gap="tight">
@@ -208,9 +214,10 @@ export default function ProductDetail() {
               >
                 {p.thumbnailUrl && (
                   <s-thumbnail
-                    src={p.thumbnailUrl}
+                    src={resizeCdnUrl(p.thumbnailUrl, 80)}
                     alt={p.altText}
                     size="small"
+                    loading="lazy"
                   />
                 )}
                 <s-text>{p.altText}</s-text>
