@@ -1,4 +1,6 @@
 /* eslint-disable react/prop-types */
+import { useEffect } from "react";
+
 // Banner persistente que muestra el resumen de un bulk fix recién terminado.
 // El toast es efímero (4s) y se pierde — si el merchant arregló 200 productos
 // con 3 errores, necesita poder revisar esos 3 sin recargar.
@@ -8,6 +10,14 @@
 // explícitamente con "Entendido".
 
 export default function BulkFixSummaryBanner({ summary, onDismiss }) {
+  // Scroll smooth al top cuando aparece el banner para que el merchant lo
+  // vea aunque estuviera en la mitad de la tabla de productos.
+  useEffect(() => {
+    if (summary) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [summary]);
+
   if (!summary) return null;
 
   const { totalProducts = 0, totalImages = 0, errors = [] } = summary;
