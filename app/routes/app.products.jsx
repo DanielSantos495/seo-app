@@ -113,13 +113,6 @@ const SORT_OPTIONS = [
   { value: "za", label: "Nombre Z-A" },
 ];
 
-const SORT_ICONS = {
-  worst: "sort-descending",
-  best: "sort-ascending",
-  az: "sort-ascending",
-  za: "sort-descending",
-};
-
 export default function Products() {
   const {
     analyzing,
@@ -280,9 +273,11 @@ export default function Products() {
 
   return (
     <s-page heading="Productos">
-      <s-button slot="breadcrumbActions" icon="arrow-left" variant="tertiary" href="/app">
-        Dashboard
-      </s-button>
+      <s-box slot="breadcrumbActions" paddingBlockEnd="base">
+        <s-button icon="arrow-left" variant="tertiary" href="/app">
+          Dashboard
+        </s-button>
+      </s-box>
 
       {lastBulkSummary && (
         <BulkFixSummaryBanner
@@ -321,29 +316,36 @@ export default function Products() {
               onInput={(event) => setQuery(event.target.value)}
             />
             <s-button
-              id="sort-btn"
-              variant="secondary"
-              icon={SORT_ICONS[sortKey]}
+              icon="sort"
+              variant="tertiary"
               command="--toggle"
               commandFor="sort-popover"
             >
               {SORT_OPTIONS.find((o) => o.value === sortKey)?.label}
             </s-button>
-            <s-popover id="sort-popover">
-              <s-menu>
+            <s-popover id="sort-popover" inlineSize="280">
+              <s-stack direction="block" gap="none" padding="tight">
                 {SORT_OPTIONS.map((opt) => (
-                  <s-button
+                  <s-clickable
                     key={opt.value}
-                    variant={sortKey === opt.value ? "secondary" : "auto"}
+                    padding="base"
                     onClick={() => {
                       setSortKey(opt.value);
                       document.getElementById("sort-popover")?.hideOverlay?.();
                     }}
                   >
-                    {opt.label}
-                  </s-button>
+                    <s-stack
+                      direction="inline"
+                      alignment="center"
+                      justifyContent="space-between"
+                      gap="tight"
+                    >
+                      <s-text>{opt.label}</s-text>
+                      {sortKey === opt.value && <s-icon type="check" />}
+                    </s-stack>
+                  </s-clickable>
                 ))}
-              </s-menu>
+              </s-stack>
             </s-popover>
             {bulkFix.eligible > 0 && (
               <s-button
@@ -461,52 +463,51 @@ export default function Products() {
           id="bulk-alt-modal"
           heading="Arreglar alt texts en lote"
         >
-          <s-stack direction="block" gap="base">
-            <s-paragraph>
-              Vamos a procesar <s-text>{bulkFix.processable}</s-text> producto
-              {bulkFix.processable === 1 ? "" : "s"} y agregar alt text a sus
-              imágenes faltantes.
-            </s-paragraph>
-            {isBulkRunning && (
-              <JobProgress job={bulkJob} label="Aplicando alt texts" />
-            )}
-            {!isBulkRunning && isLoadingPreview && (
-              <s-stack direction="inline" gap="tight" alignment="center">
-                <s-spinner />
-                <s-text tone="subdued">Generando ejemplos…</s-text>
-              </s-stack>
-            )}
-            {!isBulkRunning && !isLoadingPreview && samples && samples.length > 0 && (
-              <s-stack direction="block" gap="tight">
-                <s-text tone="subdued">Ejemplos del patrón:</s-text>
-                {samples.map((s, idx) => (
-                  <s-text key={idx}>
-                    {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
-                  </s-text>
-                ))}
-              </s-stack>
-            )}
+          <s-box paddingBlockEnd="base">
+            <s-stack direction="block" gap="base">
+              <s-paragraph>
+                Vamos a procesar <s-text>{bulkFix.processable}</s-text> producto
+                {bulkFix.processable === 1 ? "" : "s"} y agregar alt text a sus
+                imágenes faltantes.
+              </s-paragraph>
+              {isBulkRunning && (
+                <JobProgress job={bulkJob} label="Aplicando alt texts" />
+              )}
+              {!isBulkRunning && isLoadingPreview && (
+                <s-stack direction="inline" gap="tight" alignment="center">
+                  <s-spinner />
+                  <s-text tone="subdued">Generando ejemplos…</s-text>
+                </s-stack>
+              )}
+              {!isBulkRunning && !isLoadingPreview && samples && samples.length > 0 && (
+                <s-stack direction="block" gap="tight">
+                  <s-text tone="subdued">Ejemplos del patrón:</s-text>
+                  {samples.map((s, idx) => (
+                    <s-text key={idx}>
+                      {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
+                    </s-text>
+                  ))}
+                </s-stack>
+              )}
+            </s-stack>
+          </s-box>
+          <s-stack direction="inline" gap="base" justifyContent="end">
+            <s-button command="--hide" commandFor="bulk-alt-modal">
+              {isBulkRunning ? "Cerrar (sigue en background)" : "Cancelar"}
+            </s-button>
+            <s-button
+              variant="primary"
+              {...(isApplying ? { loading: true } : {})}
+              {...(isBulkRunning ? { disabled: true } : {})}
+              onClick={() => {
+                if (!isApplying) bulkFetcher.submit({}, { method: "post" });
+              }}
+            >
+              {isBulkRunning
+                ? "En curso…"
+                : `Aplicar a ${bulkFix.processable} producto${bulkFix.processable === 1 ? "" : "s"}`}
+            </s-button>
           </s-stack>
-          <s-button
-            slot="primaryAction"
-            variant="primary"
-            {...(isApplying ? { loading: true } : {})}
-            {...(isBulkRunning ? { disabled: true } : {})}
-            onClick={() => {
-              if (!isApplying) bulkFetcher.submit({}, { method: "post" });
-            }}
-          >
-            {isBulkRunning
-              ? "En curso…"
-              : `Aplicar a ${bulkFix.processable} producto${bulkFix.processable === 1 ? "" : "s"}`}
-          </s-button>
-          <s-button
-            slot="secondaryActions"
-            command="--hide"
-            commandFor="bulk-alt-modal"
-          >
-            {isBulkRunning ? "Cerrar (sigue en background)" : "Cancelar"}
-          </s-button>
         </s-modal>
       )}
 
