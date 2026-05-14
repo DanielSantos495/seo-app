@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 // Banner persistente que muestra el resumen de un bulk fix recién terminado.
 // El toast es efímero (4s) y se pierde — si el merchant arregló 200 productos
@@ -10,11 +10,15 @@ import { useEffect } from "react";
 // explícitamente con "Entendido".
 
 export default function BulkFixSummaryBanner({ summary, onDismiss }) {
-  // Scroll smooth al top cuando aparece el banner para que el merchant lo
-  // vea aunque estuviera en la mitad de la tabla de productos.
+  const ref = useRef(null);
+
+  // scrollIntoView en lugar de window.scrollTo: en Shopify embedded el
+  // iframe no tiene scroll propio (el admin lo redimensiona), así que
+  // scrollTo del window no hace nada visible. scrollIntoView encuentra el
+  // contenedor con overflow correcto y scrollea hasta el elemento.
   useEffect(() => {
-    if (summary) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    if (summary && ref.current) {
+      ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [summary]);
 
@@ -32,65 +36,71 @@ export default function BulkFixSummaryBanner({ summary, onDismiss }) {
 
   if (isEmpty) {
     return (
-      <s-banner tone="info" heading="Sin cambios">
-        <s-paragraph>No había alt texts para agregar.</s-paragraph>
-        <s-button slot="primaryAction" onClick={onDismiss}>
-          Entendido
-        </s-button>
-      </s-banner>
+      <div ref={ref}>
+        <s-banner tone="info" heading="Sin cambios">
+          <s-paragraph>No había alt texts para agregar.</s-paragraph>
+          <s-button slot="primaryAction" onClick={onDismiss}>
+            Entendido
+          </s-button>
+        </s-banner>
+      </div>
     );
   }
 
   if (isAlreadyOk) {
     return (
-      <s-banner tone="success" heading="Listado actualizado">
-        <s-paragraph>
-          Esos {totalProducts} producto{totalProducts === 1 ? "" : "s"} ya{" "}
-          tenía{totalProducts === 1 ? "" : "n"} alt text en todas sus imágenes
-          (probablemente imágenes compartidas con productos arreglados en este
-          mismo job). Sincronizamos el listado.
-        </s-paragraph>
-        <s-button slot="primaryAction" onClick={onDismiss}>
-          Entendido
-        </s-button>
-      </s-banner>
+      <div ref={ref}>
+        <s-banner tone="success" heading="Listado actualizado">
+          <s-paragraph>
+            Esos {totalProducts} producto{totalProducts === 1 ? "" : "s"} ya{" "}
+            tenía{totalProducts === 1 ? "" : "n"} alt text en todas sus imágenes
+            (probablemente imágenes compartidas con productos arreglados en este
+            mismo job). Sincronizamos el listado.
+          </s-paragraph>
+          <s-button slot="primaryAction" onClick={onDismiss}>
+            Entendido
+          </s-button>
+        </s-banner>
+      </div>
     );
   }
 
   return (
-    <s-banner
-      tone={hasErrors ? "warning" : "success"}
-      heading={
-        hasErrors
-          ? `Listo con ${errors.length} error${errors.length === 1 ? "" : "es"}`
-          : "Bulk fix completado"
-      }
-    >
-      <s-paragraph>
-        {okCount} producto{okCount === 1 ? "" : "s"} actualizado
-        {okCount === 1 ? "" : "s"} · {totalImages} alt text
-        {totalImages === 1 ? "" : "s"} agregado{totalImages === 1 ? "" : "s"}.
-      </s-paragraph>
+    <div ref={ref}>
+      <s-banner
+        tone={hasErrors ? "warning" : "success"}
+        heading={
+          hasErrors
+            ? `Listo con ${errors.length} error${errors.length === 1 ? "" : "es"}`
+            : "Bulk fix completado"
+        }
+      >
+        <s-paragraph>
+          {okCount} producto{okCount === 1 ? "" : "s"} actualizado
+          {okCount === 1 ? "" : "s"} · {totalImages} alt text
+          {totalImages === 1 ? "" : "s"} agregado{totalImages === 1 ? "" : "s"}.
+        </s-paragraph>
 
-      {hasErrors && (
-        <s-stack direction="block" gap="tight">
-          <s-text tone="subdued">Productos con error:</s-text>
-          {errors.slice(0, 10).map((e, idx) => (
-            <s-text key={idx} tone="critical">
-              · {e.message}
-            </s-text>
-          ))}
-          {errors.length > 10 && (
-            <s-text tone="subdued">
-              … y {errors.length - 10} error{errors.length - 10 === 1 ? "" : "es"} más
-            </s-text>
-          )}
-        </s-stack>
-      )}
+        {hasErrors && (
+          <s-stack direction="block" gap="tight">
+            <s-text tone="subdued">Productos con error:</s-text>
+            {errors.slice(0, 10).map((e, idx) => (
+              <s-text key={idx} tone="critical">
+                · {e.message}
+              </s-text>
+            ))}
+            {errors.length > 10 && (
+              <s-text tone="subdued">
+                … y {errors.length - 10} error{errors.length - 10 === 1 ? "" : "es"} más
+              </s-text>
+            )}
+          </s-stack>
+        )}
 
-      <s-button slot="primaryAction" onClick={onDismiss}>
-        Entendido
-      </s-button>
-    </s-banner>
+        <s-button slot="primaryAction" onClick={onDismiss}>
+          Entendido
+        </s-button>
+      </s-banner>
+    </div>
   );
 }
