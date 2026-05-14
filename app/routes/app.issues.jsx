@@ -370,7 +370,7 @@ export default function Issues() {
         ))
       )}
 
-      {isPro && bulkFix.eligible > 0 && !lastBulkSummary && (
+      {isPro && bulkFix.eligible > 0 && (
         <s-modal id="bulk-alt-modal" heading="Arreglar alt texts en lote">
           <s-paragraph>
             Vamos a procesar <s-text>{bulkFix.processable}</s-text> producto
