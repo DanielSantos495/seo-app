@@ -152,24 +152,12 @@ export const action = async ({ request }) => {
   return { ok: true, jobId: job.id };
 };
 
-function formatRelativeTime(isoDate) {
-  const diffMs = Date.now() - new Date(isoDate).getTime();
-  const min = Math.floor(diffMs / 60000);
-  if (min < 1) return "hace unos segundos";
-  if (min < 60) return `hace ${min} min`;
-  const hours = Math.floor(min / 60);
-  if (hours < 24) return `hace ${hours} h`;
-  const days = Math.floor(hours / 24);
-  return `hace ${days} d`;
-}
-
 export default function Issues() {
   const {
     analyzing,
     analysisJob: initialAnalysisJob,
     bulkJob: initialBulkJob,
     groups,
-    analyzedAt,
     isPro,
     isStale,
     bulkFix,
@@ -257,9 +245,9 @@ export default function Issues() {
 
   return (
     <s-page heading="Issues">
-      <s-link slot="breadcrumbActions" href="/app">
+      <s-button slot="breadcrumbActions" icon="arrow-left" variant="tertiary" href="/app">
         Dashboard
-      </s-link>
+      </s-button>
 
       {lastBulkSummary && (
         <BulkFixSummaryBanner
@@ -277,10 +265,6 @@ export default function Issues() {
           <JobProgress job={analysisJob} label="Re-analizando" />
         </s-banner>
       )}
-
-      <s-text tone="subdued">
-        Último análisis {formatRelativeTime(analyzedAt)}
-      </s-text>
 
       {groups.length === 0 ? (
         <s-section>
@@ -320,7 +304,7 @@ export default function Issues() {
                   <s-clickable
                     key={p.productId}
                     href={`/app/products/${gidToNumericId(p.productId)}`}
-                    padding="tight"
+                    padding="base"
                     borderWidth="base"
                     borderRadius="base"
                   >

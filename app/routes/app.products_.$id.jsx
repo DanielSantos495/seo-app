@@ -134,9 +134,9 @@ export default function ProductDetail() {
 
   return (
     <s-page heading={product.title}>
-      <s-link slot="breadcrumbActions" href="/app/products">
+      <s-button slot="breadcrumbActions" icon="arrow-left" variant="tertiary" href="/app/products">
         Productos
-      </s-link>
+      </s-button>
       <s-button
         slot="primaryAction"
         variant="primary"
@@ -308,9 +308,9 @@ export default function ProductDetail() {
 export function ErrorBoundary() {
   return (
     <s-page heading="Producto no encontrado">
-      <s-link slot="breadcrumbActions" href="/app/products">
+      <s-button slot="breadcrumbActions" icon="arrow-left" variant="tertiary" href="/app/products">
         Productos
-      </s-link>
+      </s-button>
       <s-section>
         <s-banner tone="critical" heading="No pudimos cargar este producto">
           <s-paragraph>

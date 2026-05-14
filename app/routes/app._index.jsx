@@ -211,11 +211,7 @@ export default function Index() {
           <JobProgress job={job} label="Re-analizando" />
         </s-banner>
       )}
-      {isPro ? (
-        <s-banner tone="success" heading="Plan Pro activo">
-          <s-paragraph>Analizamos todos los productos de tu tienda.</s-paragraph>
-        </s-banner>
-      ) : (
+      {!isPro && (
         <s-banner
           tone="info"
           heading={`Plan Free · análisis limitado a ${planLimit} productos`}
@@ -237,8 +233,11 @@ export default function Index() {
 
       <s-section heading="Score general de tu tienda">
         <s-stack direction="block" gap="base">
-          <s-stack direction="inline" gap="large" alignment="center">
+          <s-stack direction="inline" gap="base" alignment="center">
             <s-heading size="large">{report.overallScore}/100</s-heading>
+            <s-badge tone={report.overallScore >= 80 ? "success" : report.overallScore >= 50 ? "caution" : "critical"}>
+              {report.overallScore >= 80 ? "Bueno" : report.overallScore >= 50 ? "Regular" : "Crítico"}
+            </s-badge>
             <s-text>
               Promedio sobre {report.totalProducts} producto
               {report.totalProducts === 1 ? "" : "s"} analizado

@@ -106,23 +106,19 @@ export const action = async ({ request }) => {
   return { ok: true, jobId: job.id };
 };
 
-function formatRelativeTime(isoDate) {
-  const diffMs = Date.now() - new Date(isoDate).getTime();
-  const min = Math.floor(diffMs / 60000);
-  if (min < 1) return "hace unos segundos";
-  if (min < 60) return `hace ${min} min`;
-  const hours = Math.floor(min / 60);
-  if (hours < 24) return `hace ${hours} h`;
-  const days = Math.floor(hours / 24);
-  return `hace ${days} d`;
-}
-
 const SORT_OPTIONS = [
   { value: "worst", label: "Peor score primero" },
   { value: "best", label: "Mejor score primero" },
   { value: "az", label: "Nombre A-Z" },
   { value: "za", label: "Nombre Z-A" },
 ];
+
+const SORT_ICONS = {
+  worst: "sort-descending",
+  best: "sort-ascending",
+  az: "sort-ascending",
+  za: "sort-descending",
+};
 
 export default function Products() {
   const {
@@ -131,7 +127,6 @@ export default function Products() {
     bulkJob: initialBulkJob,
     items,
     planLimit,
-    analyzedAt,
     isPro,
     isStale,
     bulkFix,
@@ -285,9 +280,9 @@ export default function Products() {
 
   return (
     <s-page heading="Productos">
-      <s-link slot="breadcrumbActions" href="/app">
+      <s-button slot="breadcrumbActions" icon="arrow-left" variant="tertiary" href="/app">
         Dashboard
-      </s-link>
+      </s-button>
 
       {lastBulkSummary && (
         <BulkFixSummaryBanner
@@ -318,9 +313,6 @@ export default function Products() {
 
       <s-section>
         <s-stack direction="block" gap="base">
-          <s-text tone="subdued">
-            Último análisis {formatRelativeTime(analyzedAt)}
-          </s-text>
           <s-stack direction="inline" gap="base">
             <s-search-field
               label="Buscar producto"
@@ -328,17 +320,29 @@ export default function Products() {
               value={query}
               onInput={(event) => setQuery(event.target.value)}
             />
-            <s-select
-              label="Ordenar por"
-              value={sortKey}
-              onChange={(event) => setSortKey(event.target.value)}
+            <s-button
+              id="sort-btn"
+              variant="secondary"
+              icon={SORT_ICONS[sortKey]}
+              command="--toggle"
+              commandFor="sort-popover"
             >
+              {SORT_OPTIONS.find((o) => o.value === sortKey)?.label}
+            </s-button>
+            <s-popover id="sort-popover">
               {SORT_OPTIONS.map((opt) => (
-                <s-option key={opt.value} value={opt.value}>
+                <s-button
+                  key={opt.value}
+                  variant={sortKey === opt.value ? "secondary" : "auto"}
+                  onClick={() => {
+                    setSortKey(opt.value);
+                    document.getElementById("sort-popover")?.hideOverlay?.();
+                  }}
+                >
                   {opt.label}
-                </s-option>
+                </s-button>
               ))}
-            </s-select>
+            </s-popover>
             {bulkFix.eligible > 0 && (
               <s-button
                 variant="primary"
