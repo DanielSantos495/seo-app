@@ -450,7 +450,7 @@ export default function Products() {
         </s-stack>
       </s-section>
 
-      {isPro && bulkFix.eligible > 0 && (
+      {isPro && bulkFix.eligible > 0 && !lastBulkSummary && (
         <s-modal
           id="bulk-alt-modal"
           heading="Arreglar alt texts en lote"
