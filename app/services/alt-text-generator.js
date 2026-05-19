@@ -52,7 +52,7 @@ export function generateAltTexts(product) {
     } else {
       orphanCount++;
       const alt =
-        orphanCount === 1 ? title : `${title} - vista ${orphanCount}`;
+        orphanCount === 1 ? title : `${title} - view ${orphanCount}`;
       result.set(image.id, truncate(alt));
     }
   }

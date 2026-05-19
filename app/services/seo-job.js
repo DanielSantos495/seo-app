@@ -83,7 +83,7 @@ export async function findActiveJob(shop, type) {
 
   const heartbeat = job.lastHeartbeatAt || job.startedAt || job.createdAt;
   if (Date.now() - heartbeat.getTime() > ZOMBIE_THRESHOLD_MS) {
-    await failJob(job.id, "Job sin heartbeat — proceso interrumpido");
+    await failJob(job.id, "Job stopped responding — process interrupted");
     return null;
   }
   return job;

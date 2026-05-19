@@ -4,9 +4,9 @@
 export const ISSUE_LABELS = {
   "seo.title": "Meta title",
   "seo.description": "Meta description",
-  "images.altText": "Alt text en imágenes",
-  descriptionHtml: "Descripción del producto",
-  handle: "URL / handle",
+  "images.altText": "Image alt text",
+  descriptionHtml: "Product description",
+  handle: "URL handle",
 };
 
 export function labelForField(field) {
