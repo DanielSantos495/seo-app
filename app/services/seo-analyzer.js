@@ -44,16 +44,16 @@ export function analyzeProduct(product) {
       issues.push({
         field: "seo.title",
         impact: "medium",
-        message: `Meta title tiene ${seoTitle.length} caracteres (ideal ${META_TITLE_MIN}–${META_TITLE_MAX}).`,
-        fix: `Ajusta el título SEO entre ${META_TITLE_MIN} y ${META_TITLE_MAX} caracteres para que Google no lo recorte.`,
+        message: `Meta title is ${seoTitle.length} characters (ideal: ${META_TITLE_MIN}–${META_TITLE_MAX}).`,
+        fix: `Keep the SEO title between ${META_TITLE_MIN} and ${META_TITLE_MAX} characters so Google doesn't truncate it.`,
       });
     }
   } else {
     issues.push({
       field: "seo.title",
       impact: "high",
-      message: "Falta el meta title.",
-      fix: `Agrega un título SEO de ${META_TITLE_MIN}–${META_TITLE_MAX} caracteres.`,
+      message: "Meta title is missing.",
+      fix: `Add an SEO title between ${META_TITLE_MIN} and ${META_TITLE_MAX} characters.`,
     });
   }
 
@@ -68,16 +68,16 @@ export function analyzeProduct(product) {
       issues.push({
         field: "seo.description",
         impact: "medium",
-        message: `Meta description tiene ${seoDescription.length} caracteres (ideal ${META_DESC_MIN}–${META_DESC_MAX}).`,
-        fix: `Reescribe la meta description entre ${META_DESC_MIN} y ${META_DESC_MAX} caracteres.`,
+        message: `Meta description is ${seoDescription.length} characters (ideal: ${META_DESC_MIN}–${META_DESC_MAX}).`,
+        fix: `Rewrite the meta description between ${META_DESC_MIN} and ${META_DESC_MAX} characters.`,
       });
     }
   } else {
     issues.push({
       field: "seo.description",
       impact: "high",
-      message: "Falta la meta description.",
-      fix: `Agrega una meta description de ${META_DESC_MIN}–${META_DESC_MAX} caracteres.`,
+      message: "Meta description is missing.",
+      fix: `Add a meta description between ${META_DESC_MIN} and ${META_DESC_MAX} characters.`,
     });
   }
 
@@ -93,8 +93,8 @@ export function analyzeProduct(product) {
       issues.push({
         field: "images.altText",
         impact: "medium",
-        message: `${missingAlt.length} de ${images.length} imágenes sin alt text.`,
-        fix: "Agrega alt text descriptivo a cada imagen — clave para SEO de imágenes y accesibilidad.",
+        message: `${missingAlt.length} of ${images.length} images missing alt text.`,
+        fix: "Add descriptive alt text to each image — key for image SEO and accessibility.",
         meta: { missingImageIds: missingAlt.map((i) => i.id) },
       });
     }
@@ -109,9 +109,9 @@ export function analyzeProduct(product) {
       impact: descriptionPlain.length === 0 ? "high" : "medium",
       message:
         descriptionPlain.length === 0
-          ? "El producto no tiene descripción."
-          : `Descripción muy corta (${descriptionPlain.length} caracteres).`,
-      fix: `Escribe al menos ${DESCRIPTION_MIN_CHARS} caracteres de descripción real (sin contar HTML).`,
+          ? "This product has no description."
+          : `Description is too short (${descriptionPlain.length} characters).`,
+      fix: `Write at least ${DESCRIPTION_MIN_CHARS} characters of real description (excluding HTML).`,
     });
   }
 
@@ -124,8 +124,8 @@ export function analyzeProduct(product) {
     issues.push({
       field: "handle",
       impact: "low",
-      message: `El handle "${handle}" no es óptimo para SEO.`,
-      fix: "Usa solo minúsculas, números y guiones; evita IDs o timestamps en la URL.",
+      message: `The handle "${handle}" isn't optimal for SEO.`,
+      fix: "Use only lowercase letters, numbers, and hyphens. Avoid IDs or timestamps in the URL.",
     });
   }
 
