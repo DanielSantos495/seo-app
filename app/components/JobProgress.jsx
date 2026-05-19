@@ -68,7 +68,7 @@ export function useJobPolling({
 
 // Vista visual estándar del progreso de un job. Muestra barra (si conocemos
 // total) o spinner indeterminado (si no), texto X / Y, y ETA.
-export function JobProgress({ job, label = "Procesando" }) {
+export function JobProgress({ job, label = "Processing" }) {
   if (!job) return null;
   const { processed, total, status } = job;
   const pct =
@@ -76,9 +76,9 @@ export function JobProgress({ job, label = "Procesando" }) {
 
   if (status === "failed") {
     return (
-      <s-banner tone="critical" heading="El proceso falló">
+      <s-banner tone="critical" heading="The process failed">
         <s-paragraph>
-          {job.errorMessage || "Ocurrió un error inesperado. Intenta de nuevo."}
+          {job.errorMessage || "An unexpected error occurred. Try again."}
         </s-paragraph>
       </s-banner>
     );
@@ -90,7 +90,7 @@ export function JobProgress({ job, label = "Procesando" }) {
         <s-spinner />
         <s-text>
           {label}
-          {total > 0 ? ` · ${processed} / ${total}` : ` · ${processed} procesados`}
+          {total > 0 ? ` · ${processed} / ${total}` : ` · ${processed} processed`}
           {pct !== null ? ` (${pct}%)` : ""}
         </s-text>
       </s-stack>

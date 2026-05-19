@@ -23,7 +23,7 @@ function SkeletonBox({ height = "1.2rem", width = "100%" }) {
 function DashboardSkeleton() {
   return (
     <s-page heading="SEO Analyzer">
-      <s-section heading="Score general de tu tienda">
+      <s-section heading="Overall store score">
         <s-stack direction="block" gap="base">
           <SkeletonBox height="2.5rem" width="40%" />
           <SkeletonBox width="60%" />
@@ -33,7 +33,7 @@ function DashboardSkeleton() {
           </s-stack>
         </s-stack>
       </s-section>
-      <s-section heading="Issues encontrados">
+      <s-section heading="Issues found">
         <s-stack direction="inline" gap="large">
           <SkeletonBox height="4rem" width="120px" />
           <SkeletonBox height="4rem" width="120px" />
@@ -46,7 +46,7 @@ function DashboardSkeleton() {
 
 function ProductsSkeleton() {
   return (
-    <s-page heading="Productos">
+    <s-page heading="Products">
       <s-section>
         <s-stack direction="block" gap="base">
           <s-stack direction="inline" gap="base">
@@ -80,8 +80,8 @@ function IssuesSkeleton() {
 
 function ProductDetailSkeleton() {
   return (
-    <s-page heading="Producto">
-      <s-section heading="Resumen SEO">
+    <s-page heading="Product">
+      <s-section heading="SEO summary">
         <s-stack direction="inline" gap="large" alignment="center">
           <SkeletonBox height="120px" width="120px" />
           <s-stack direction="block" gap="tight">
@@ -90,7 +90,7 @@ function ProductDetailSkeleton() {
           </s-stack>
         </s-stack>
       </s-section>
-      <s-section heading="Issues a corregir">
+      <s-section heading="Issues to fix">
         <s-stack direction="block" gap="tight">
           {Array.from({ length: 3 }).map((_, i) => (
             <SkeletonBox key={i} height="4rem" />

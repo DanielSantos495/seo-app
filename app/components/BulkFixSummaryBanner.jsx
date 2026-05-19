@@ -22,10 +22,10 @@ export default function BulkFixSummaryBanner({ summary, onDismiss }) {
 
   if (isEmpty) {
     return (
-      <s-banner tone="info" heading="Sin cambios">
-        <s-paragraph>No había alt texts para agregar.</s-paragraph>
+      <s-banner tone="info" heading="No changes">
+        <s-paragraph>No alt texts to add.</s-paragraph>
         <s-button slot="primaryAction" onClick={onDismiss}>
-          Entendido
+          Got it
         </s-button>
       </s-banner>
     );
@@ -33,15 +33,14 @@ export default function BulkFixSummaryBanner({ summary, onDismiss }) {
 
   if (isAlreadyOk) {
     return (
-      <s-banner tone="success" heading="Listado actualizado">
+      <s-banner tone="success" heading="List updated">
         <s-paragraph>
-          Esos {totalProducts} producto{totalProducts === 1 ? "" : "s"} ya{" "}
-          tenía{totalProducts === 1 ? "" : "n"} alt text en todas sus imágenes
-          (probablemente imágenes compartidas con productos arreglados en este
-          mismo job). Sincronizamos el listado.
+          Those {totalProducts} product{totalProducts === 1 ? "" : "s"} already
+          had alt text on all images (likely because they share images with
+          products fixed in this same job). The list is now in sync.
         </s-paragraph>
         <s-button slot="primaryAction" onClick={onDismiss}>
-          Entendido
+          Got it
         </s-button>
       </s-banner>
     );
@@ -52,19 +51,18 @@ export default function BulkFixSummaryBanner({ summary, onDismiss }) {
       tone={hasErrors ? "warning" : "success"}
       heading={
         hasErrors
-          ? `Listo con ${errors.length} error${errors.length === 1 ? "" : "es"}`
-          : "Bulk fix completado"
+          ? `Completed with ${errors.length} error${errors.length === 1 ? "" : "s"}`
+          : "Bulk fix completed"
       }
     >
       <s-paragraph>
-        {okCount} producto{okCount === 1 ? "" : "s"} actualizado
-        {okCount === 1 ? "" : "s"} · {totalImages} alt text
-        {totalImages === 1 ? "" : "s"} agregado{totalImages === 1 ? "" : "s"}.
+        {okCount} product{okCount === 1 ? "" : "s"} updated · {totalImages} alt
+        text{totalImages === 1 ? "" : "s"} added.
       </s-paragraph>
 
       {hasErrors && (
         <s-stack direction="block" gap="tight">
-          <s-text tone="subdued">Productos con error:</s-text>
+          <s-text tone="subdued">Products with errors:</s-text>
           {errors.slice(0, 10).map((e, idx) => (
             <s-text key={idx} tone="critical">
               · {e.message}
@@ -72,14 +70,14 @@ export default function BulkFixSummaryBanner({ summary, onDismiss }) {
           ))}
           {errors.length > 10 && (
             <s-text tone="subdued">
-              … y {errors.length - 10} error{errors.length - 10 === 1 ? "" : "es"} más
+              …and {errors.length - 10} more error{errors.length - 10 === 1 ? "" : "s"}
             </s-text>
           )}
         </s-stack>
       )}
 
       <s-button slot="primaryAction" onClick={onDismiss}>
-        Entendido
+        Got it
       </s-button>
     </s-banner>
   );

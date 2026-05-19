@@ -11,9 +11,9 @@ const IMPACT_TONE = {
 };
 
 const IMPACT_LABEL = {
-  high: "Crítico",
-  medium: "Medio",
-  low: "Bajo",
+  high: "Critical",
+  medium: "Medium",
+  low: "Low",
 };
 
 const IMPACT_ORDER = { high: 0, medium: 1, low: 2 };
@@ -21,8 +21,8 @@ const IMPACT_ORDER = { high: 0, medium: 1, low: 2 };
 export default function IssuesList({ issues = [], editUrl }) {
   if (issues.length === 0) {
     return (
-      <s-banner tone="success" heading="Sin issues detectados">
-        <s-paragraph>Excelente trabajo — este contenido cumple con los criterios SEO.</s-paragraph>
+      <s-banner tone="success" heading="No issues found">
+        <s-paragraph>Nice work — this content meets the SEO criteria.</s-paragraph>
       </s-banner>
     );
   }
@@ -55,7 +55,7 @@ export default function IssuesList({ issues = [], editUrl }) {
             </s-stack>
             <s-text tone="subdued">{issue.fix}</s-text>
             {editUrl && (
-              <s-link href={editUrls[issue.field] || editUrl}>Arreglar en Shopify →</s-link>
+              <s-link href={editUrls[issue.field] || editUrl}>Fix in Shopify →</s-link>
             )}
           </s-stack>
         </s-box>
