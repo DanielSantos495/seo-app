@@ -96,12 +96,12 @@ export const action = async ({ request }) => {
 function formatRelativeTime(isoDate) {
   const diffMs = Date.now() - new Date(isoDate).getTime();
   const min = Math.floor(diffMs / 60000);
-  if (min < 1) return "hace unos segundos";
-  if (min < 60) return `hace ${min} min`;
+  if (min < 1) return "Just now";
+  if (min < 60) return `${min} min ago`;
   const hours = Math.floor(min / 60);
-  if (hours < 24) return `hace ${hours} h`;
+  if (hours < 24) return `${hours} h ago`;
   const days = Math.floor(hours / 24);
-  return `hace ${days} d`;
+  return `${days} d ago`;
 }
 
 async function downloadCsv() {
@@ -160,26 +160,26 @@ export default function Index() {
     return (
       <s-page heading="SEO Analyzer">
         {failedJob && (
-          <s-banner tone="critical" heading="El último análisis falló">
+          <s-banner tone="critical" heading="Last analysis failed">
             <s-paragraph>
               {failedJob.errorMessage ||
-                "Hubo un error inesperado. Probá de nuevo."}
+                "An unexpected error occurred. Try again."}
             </s-paragraph>
             <Form method="post" slot="primaryAction">
               <s-button type="submit" variant="primary">
-                Reintentar análisis
+                Retry analysis
               </s-button>
             </Form>
           </s-banner>
         )}
-        <s-section heading="Analizando tu tienda">
+        <s-section heading="Analyzing your store">
           <s-stack direction="block" gap="base">
             <s-paragraph>
-              Estamos analizando todos tus productos por primera vez. Esto
-              puede tomar unos minutos para tiendas grandes — podés cerrar esta
-              pestaña, el análisis sigue en background.
+              We're analyzing all your products for the first time. This can
+              take a few minutes for large stores — you can close this tab and
+              the analysis will keep running in the background.
             </s-paragraph>
-            <JobProgress job={job} label="Analizando productos" />
+            <JobProgress job={job} label="Analyzing products" />
           </s-stack>
         </s-section>
       </s-page>
@@ -189,36 +189,36 @@ export default function Index() {
   return (
     <s-page heading="SEO Analyzer">
       {failedJob && !isActive && (
-        <s-banner tone="critical" heading="El último análisis falló">
+        <s-banner tone="critical" heading="Last analysis failed">
           <s-paragraph>
-            Estamos mostrando datos del análisis anterior.{" "}
+            Showing data from the previous analysis.{" "}
             {failedJob.errorMessage ||
-              "Hubo un error inesperado al refrescar."}
+              "An unexpected error occurred while refreshing."}
           </s-paragraph>
           <Form method="post" slot="primaryAction">
             <s-button type="submit" variant="primary">
-              Reintentar
+              Retry
             </s-button>
           </Form>
         </s-banner>
       )}
       {isStale && isActive && (
-        <s-banner tone="info" heading="Actualizando datos">
+        <s-banner tone="info" heading="Refreshing data">
           <s-paragraph>
-            Mostramos el último análisis disponible mientras refrescamos en
+            Showing the latest available analysis while we refresh in the
             background.
           </s-paragraph>
-          <JobProgress job={job} label="Re-analizando" />
+          <JobProgress job={job} label="Re-analyzing" />
         </s-banner>
       )}
       {!isPro && (
         <s-banner
           tone="info"
-          heading={`Plan Free · análisis limitado a ${planLimit} productos`}
+          heading={`Free plan · analysis limited to ${planLimit} products`}
         >
           <s-paragraph>
-            Mejora a Pro para analizar todos tus productos y desbloquear el bulk
-            fix de alt texts.
+            Upgrade to Pro to analyze all your products and unlock bulk alt
+            text fixes.
           </s-paragraph>
           <s-button
             slot="secondaryActions"
@@ -226,42 +226,41 @@ export default function Index() {
             href={upgradeUrl}
             target="_top"
           >
-            Mejorar a Pro · $9/mes (7 días gratis)
+            Upgrade to Pro · $9/month (7-day free trial)
           </s-button>
         </s-banner>
       )}
 
-      <s-section heading="Score general de tu tienda">
+      <s-section heading="Overall store score">
         <s-stack direction="block" gap="base">
           <s-stack direction="inline" gap="base" alignment="center">
             <s-heading size="large">{report.overallScore}/100</s-heading>
             <s-badge tone={report.overallScore >= 80 ? "success" : report.overallScore >= 50 ? "caution" : "critical"}>
-              {report.overallScore >= 80 ? "Bueno" : report.overallScore >= 50 ? "Regular" : "Crítico"}
+              {report.overallScore >= 80 ? "Good" : report.overallScore >= 50 ? "Fair" : "Critical"}
             </s-badge>
             <s-text>
-              Promedio sobre {report.totalProducts} producto
-              {report.totalProducts === 1 ? "" : "s"} analizado
+              Average across {report.totalProducts} analyzed product
               {report.totalProducts === 1 ? "" : "s"}
               {report.totalProducts >= planLimit
-                ? ` (límite del plan free: ${planLimit}).`
+                ? ` (free plan limit: ${planLimit}).`
                 : "."}
             </s-text>
           </s-stack>
           <s-text tone="subdued">
-            Último análisis {formatRelativeTime(analyzedAt)}
+            Last analyzed {formatRelativeTime(analyzedAt)}
           </s-text>
           <s-stack direction="inline" gap="base">
             <PrefetchButton to="/app/products" variant="primary">
-              Ver todos los productos
+              View all products
             </PrefetchButton>
             <Form method="post">
               <s-button type="submit" variant="secondary">
-                Re-analizar ahora
+                Re-analyze now
               </s-button>
             </Form>
             {isPro ? (
               <s-button variant="secondary" onClick={() => downloadCsv()}>
-                Exportar CSV
+                Export CSV
               </s-button>
             ) : (
               <s-button
@@ -269,20 +268,20 @@ export default function Index() {
                 target="_top"
                 variant="secondary"
               >
-                Pro: exportar CSV
+                Pro: export CSV
               </s-button>
             )}
           </s-stack>
         </s-stack>
       </s-section>
 
-      <s-section heading="Issues encontrados">
+      <s-section heading="Issues found">
         <s-stack direction="block" gap="base">
           <s-stack direction="inline" gap="large">
             {[
-              { label: "Críticos", count: report.issuesByImpact.high, tone: "critical" },
-              { label: "Medios", count: report.issuesByImpact.medium, tone: "caution" },
-              { label: "Bajos", count: report.issuesByImpact.low, tone: "info" },
+              { label: "Critical", count: report.issuesByImpact.high, tone: "critical" },
+              { label: "Medium", count: report.issuesByImpact.medium, tone: "caution" },
+              { label: "Low", count: report.issuesByImpact.low, tone: "info" },
             ].map(({ label, count, tone }) => (
               <s-box
                 key={label}
@@ -298,12 +297,12 @@ export default function Index() {
               </s-box>
             ))}
           </s-stack>
-          <PrefetchButton to="/app/issues">Ver issues agrupados por tipo</PrefetchButton>
+          <PrefetchButton to="/app/issues">View issues grouped by type</PrefetchButton>
         </s-stack>
       </s-section>
 
       {worstProducts.length > 0 && (
-        <s-section heading="Productos con peor SEO">
+        <s-section heading="Lowest-scoring products">
           <s-stack direction="block" gap="base">
             {worstProducts.map((product) => (
               <PrefetchClickable
@@ -331,10 +330,10 @@ export default function Index() {
       )}
 
       {report.totalProducts === 0 && (
-        <s-section heading="Sin productos">
+        <s-section heading="No products">
           <s-paragraph>
-            Esta tienda aún no tiene productos. Crea algunos en el admin de
-            Shopify y vuelve para ver el análisis.
+            This store doesn't have any products yet. Create some in your
+            Shopify admin, then come back to see the analysis.
           </s-paragraph>
         </s-section>
       )}
