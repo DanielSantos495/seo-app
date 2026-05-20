@@ -49,7 +49,7 @@ export default function App() {
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <NavLink to="/app">Dashboard</NavLink>
-        <NavLink to="/app/products">Productos</NavLink>
+        <NavLink to="/app/products">Products</NavLink>
         <NavLink to="/app/issues">Issues</NavLink>
       </s-app-nav>
       {isNavigatingAway ? (
@@ -69,17 +69,16 @@ export function ErrorBoundary() {
   // el error (típico cuando la sesión tiene scopes viejos → 403 al validar).
   if (error?.status === 403) {
     return (
-      <s-page heading="Reinstalación requerida">
+      <s-page heading="Reinstall required">
         <s-section>
-          <s-banner tone="critical" heading="Sesión inválida">
+          <s-banner tone="critical" heading="Session expired">
             <s-paragraph>
-              Los permisos de la app cambiaron. Necesitamos que reinstales
-              la app para seguir.
+              This app's permissions changed. Reinstall to continue.
             </s-paragraph>
             <s-paragraph>
-              Andá al admin de tu tienda → Settings → Apps → desinstalá esta
-              app y volvé a abrirla desde el listado para aceptar los
-              permisos nuevos.
+              In your store admin, go to Settings → Apps, uninstall this app,
+              then open it again from the listing to accept the new
+              permissions.
             </s-paragraph>
           </s-banner>
         </s-section>

@@ -55,15 +55,15 @@ export default function Upgrade() {
   }, [confirmationUrl]);
 
   return (
-    <s-page heading="Redirigiendo a Shopify">
+    <s-page heading="Redirecting to Shopify">
       <s-section>
         <s-stack direction="block" gap="base" alignment="center">
           <s-spinner />
-          <s-heading>Te estamos llevando a la pasarela de pagos…</s-heading>
+          <s-heading>Taking you to the Shopify payment page…</s-heading>
           <s-paragraph tone="subdued">
-            Vas a aprobar el cobro en la página oficial de Shopify. Si no te
-            redirige en unos segundos,{" "}
-            <s-link href={confirmationUrl}>haz click acá</s-link>.
+            You'll approve the charge on Shopify's official page. If you're
+            not redirected in a few seconds,{" "}
+            <s-link href={confirmationUrl}>click here</s-link>.
           </s-paragraph>
         </s-stack>
       </s-section>

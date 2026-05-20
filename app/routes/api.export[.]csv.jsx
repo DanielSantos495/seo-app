@@ -21,7 +21,7 @@ export const loader = async ({ request }) => {
 
   const cached = await getCachedItems(session.shop, "pro");
   if (!cached) {
-    return new Response("Cache no disponible. Recargá la app.", { status: 404 });
+    return new Response("Cache unavailable. Reload the app.", { status: 404 });
   }
 
   const exportItems = cached.items.filter((i) => !i.locked);
