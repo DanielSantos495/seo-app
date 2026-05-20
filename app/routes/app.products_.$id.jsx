@@ -27,7 +27,7 @@ export const loader = async ({ request, params }) => {
   const gid = `gid://shopify/Product/${params.id}`;
   const product = await fetchProductById(admin, gid);
   if (!product) {
-    throw new Response("Producto no encontrado", { status: 404 });
+    throw new Response("Product not found", { status: 404 });
   }
 
   const analysis = analyzeProduct(product);
@@ -52,7 +52,7 @@ export const action = async ({ request, params }) => {
   const isPro = await checkIsPro(billing, session.shop);
   if (!isPro) {
     return new Response(
-      JSON.stringify({ error: "Esta acción es solo para plan Pro" }),
+      JSON.stringify({ error: "This action is only available on the Pro plan" }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -60,7 +60,7 @@ export const action = async ({ request, params }) => {
   const gid = `gid://shopify/Product/${params.id}`;
   const product = await fetchProductById(admin, gid);
   if (!product) {
-    throw new Response("Producto no encontrado", { status: 404 });
+    throw new Response("Product not found", { status: 404 });
   }
 
   const altTexts = generateAltTexts(product);
@@ -124,8 +124,8 @@ export default function ProductDetail() {
     if (actionData.ok) {
       shopify.toast.show(
         actionData.count === 0
-          ? "No había alt texts para agregar"
-          : `Listo: ${actionData.count} alt text${actionData.count === 1 ? "" : "s"} agregado${actionData.count === 1 ? "" : "s"}`,
+          ? "No alt texts to add"
+          : `Done: ${actionData.count} alt text${actionData.count === 1 ? "" : "s"} added`,
       );
     } else if (actionData.error) {
       shopify.toast.show(`Error: ${actionData.error}`, { isError: true });
@@ -135,17 +135,17 @@ export default function ProductDetail() {
   return (
     <s-page heading={product.title}>
       <s-button slot="breadcrumbActions" icon="arrow-left" variant="tertiary" href="/app/products">
-        Productos
+        Products
       </s-button>
       <s-button
         slot="primaryAction"
         variant="primary"
         href={editUrl}
       >
-        Editar en Shopify
+        Edit in Shopify
       </s-button>
 
-      <s-section heading="Resumen SEO">
+      <s-section heading="SEO summary">
         <s-stack direction="inline" gap="large" alignment="center">
           {featured && (
             <s-thumbnail
@@ -160,7 +160,7 @@ export default function ProductDetail() {
               <s-heading size="large">{analysis.score}/100</s-heading>
               <s-badge tone={SCORE_TONE(analysis.score)}>
                 {analysis.issues.length === 0
-                  ? "Sin issues"
+                  ? "No issues"
                   : `${analysis.issues.length} issue${analysis.issues.length === 1 ? "" : "s"}`}
               </s-badge>
             </s-stack>
@@ -169,13 +169,13 @@ export default function ProductDetail() {
         </s-stack>
       </s-section>
 
-      <s-section heading="Issues a corregir">
+      <s-section heading="Issues to fix">
         <IssuesList issues={analysis.issues} editUrl={editUrl} />
       </s-section>
 
-      <s-section slot="aside" heading="Acciones rápidas">
+      <s-section slot="aside" heading="Quick actions">
         <s-stack direction="block" gap="base">
-          <s-button href={editUrl}>Abrir en el admin</s-button>
+          <s-button href={editUrl}>Open in admin</s-button>
           {missingAltCount > 0 && (
             <s-button
               variant="primary"
@@ -183,13 +183,13 @@ export default function ProductDetail() {
               commandFor={isPro ? "alt-fix-modal" : "upgrade-modal"}
             >
               {isPro
-                ? `Generar alt texts faltantes (${missingAltCount})`
-                : `Pro: arreglar ${missingAltCount} alt text${missingAltCount === 1 ? "" : "s"}`}
+                ? `Generate missing alt texts (${missingAltCount})`
+                : `Pro: fix ${missingAltCount} alt text${missingAltCount === 1 ? "" : "s"}`}
             </s-button>
           )}
           {missingAltCount === 0 && (
             <s-text tone="subdued">
-              Todas las imágenes ya tienen alt text.
+              All images already have alt text.
             </s-text>
           )}
         </s-stack>
@@ -198,11 +198,11 @@ export default function ProductDetail() {
       {isPro && proposedAlts.length > 0 && (
         <s-modal
           id="alt-fix-modal"
-          heading={`Vista previa: ${proposedAlts.length} alt text${proposedAlts.length === 1 ? "" : "s"}`}
+          heading={`Preview: ${proposedAlts.length} alt text${proposedAlts.length === 1 ? "" : "s"}`}
         >
           <s-paragraph>
-            Vamos a agregar alt text a las imágenes que no lo tienen. No
-            sobreescribimos las que ya tienen alt.
+            We'll add alt text to images that don't have it. Images with
+            existing alt text won't be changed.
           </s-paragraph>
           <s-stack direction="block" gap="tight">
             {proposedAlts.map((p) => (
@@ -230,7 +230,7 @@ export default function ProductDetail() {
               variant="primary"
               {...(isApplying ? { loading: true } : {})}
             >
-              Aplicar {proposedAlts.length} cambio
+              Apply {proposedAlts.length} change
               {proposedAlts.length === 1 ? "" : "s"}
             </s-button>
           </Form>
@@ -239,7 +239,7 @@ export default function ProductDetail() {
             command="--hide"
             commandFor="alt-fix-modal"
           >
-            Cancelar
+            Cancel
           </s-button>
         </s-modal>
       )}
@@ -247,11 +247,11 @@ export default function ProductDetail() {
       {!isPro && missingAltCount > 0 && (
         <s-modal
           id="upgrade-modal"
-          heading="Mejora a Pro para arreglar alt texts"
+          heading="Upgrade to Pro to fix alt texts"
         >
           <s-paragraph>
-            El bulk fix de alt texts es exclusivo del plan Pro. Activalo y
-            generamos alt text descriptivo para todas tus imágenes en un click.
+            Bulk alt text fixes are a Pro plan feature. Turn it on and we'll
+            generate descriptive alt text for all your images in one click.
           </s-paragraph>
           <s-button
             slot="primaryAction"
@@ -259,26 +259,26 @@ export default function ProductDetail() {
             href={upgradeUrl}
             target="_top"
           >
-            Mejorar a Pro · $9/mes (7 días gratis)
+            Upgrade to Pro · $9/month (7-day free trial)
           </s-button>
           <s-button
             slot="secondaryActions"
             command="--hide"
             commandFor="upgrade-modal"
           >
-            Cerrar
+            Close
           </s-button>
         </s-modal>
       )}
 
-      <s-section slot="aside" heading="Datos actuales">
+      <s-section slot="aside" heading="Current data">
         <s-stack direction="block" gap="base">
           <s-stack direction="block" gap="tight">
             <s-text tone="subdued">Meta title</s-text>
             {product.seo.title ? (
               <s-text>{product.seo.title}</s-text>
             ) : (
-              <s-text tone="critical">Vacío</s-text>
+              <s-text tone="critical">Empty</s-text>
             )}
           </s-stack>
           <s-stack direction="block" gap="tight">
@@ -289,14 +289,14 @@ export default function ProductDetail() {
                 {product.seo.description.length > 80 ? "…" : ""}
               </s-text>
             ) : (
-              <s-text tone="critical">Vacío</s-text>
+              <s-text tone="critical">Empty</s-text>
             )}
           </s-stack>
           <s-stack direction="block" gap="tight">
-            <s-text tone="subdued">Imágenes</s-text>
+            <s-text tone="subdued">Images</s-text>
             <s-text>
               {product.images.length} ·{" "}
-              {product.images.filter((i) => i.altText).length} con alt text
+              {product.images.filter((i) => i.altText).length} with alt text
             </s-text>
           </s-stack>
         </s-stack>
@@ -307,15 +307,15 @@ export default function ProductDetail() {
 
 export function ErrorBoundary() {
   return (
-    <s-page heading="Producto no encontrado">
+    <s-page heading="Product not found">
       <s-button slot="breadcrumbActions" icon="arrow-left" variant="tertiary" href="/app/products">
-        Productos
+        Products
       </s-button>
       <s-section>
-        <s-banner tone="critical" heading="No pudimos cargar este producto">
+        <s-banner tone="critical" heading="We couldn't load this product">
           <s-paragraph>
-            Es posible que haya sido eliminado o que no tengas permiso para
-            verlo. Vuelve al listado e intenta con otro.
+            It may have been deleted, or you may not have permission to view
+            it. Go back to the list and try a different one.
           </s-paragraph>
         </s-banner>
       </s-section>

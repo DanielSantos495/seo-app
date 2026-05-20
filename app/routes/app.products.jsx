@@ -87,7 +87,7 @@ export const action = async ({ request }) => {
   const isPro = await checkIsPro(billing, session.shop);
   if (!isPro) {
     return new Response(
-      JSON.stringify({ error: "Esta acción es solo para plan Pro" }),
+      JSON.stringify({ error: "This action is only available on the Pro plan" }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -95,7 +95,7 @@ export const action = async ({ request }) => {
   // Tomamos los elegibles directamente del cache pre-computado.
   const cached = await getCachedItems(session.shop, "pro");
   if (!cached) {
-    return { ok: false, error: "Cache no disponible. Recargá la página." };
+    return { ok: false, error: "Cache unavailable. Reload the page." };
   }
   const eligibleGids = cached.eligibleAltGids;
   if (eligibleGids.length === 0) {
@@ -107,10 +107,10 @@ export const action = async ({ request }) => {
 };
 
 const SORT_OPTIONS = [
-  { value: "worst", label: "Peor score primero" },
-  { value: "best", label: "Mejor score primero" },
-  { value: "az", label: "Nombre A-Z" },
-  { value: "za", label: "Nombre Z-A" },
+  { value: "worst", label: "Lowest score first" },
+  { value: "best", label: "Highest score first" },
+  { value: "az", label: "Name A–Z" },
+  { value: "za", label: "Name Z–A" },
 ];
 
 export default function Products() {
@@ -169,12 +169,12 @@ export default function Products() {
         const totalImages = summary.totalImages || 0;
         const ok = (summary.totalProducts || 0) - errCount;
         if (totalImages === 0 && summary.totalProducts === 0) {
-          shopify.toast.show("No había alt texts para agregar");
+          shopify.toast.show("No alt texts to add");
         } else if (totalImages === 0) {
-          shopify.toast.show("Productos ya tenían alt — listado actualizado");
+          shopify.toast.show("Products already had alt text — list updated");
         } else {
           shopify.toast.show(
-            `Listo: ${ok} producto${ok === 1 ? "" : "s"} · ${totalImages} alt text${totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
+            `Done: ${ok} product${ok === 1 ? "" : "s"} · ${totalImages} alt text${totalImages === 1 ? "" : "s"} added${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "s"}` : ""}`,
             errCount ? { isError: true } : undefined,
           );
         }
@@ -260,19 +260,19 @@ export default function Products() {
   // Primer análisis en curso: sin items, solo mostramos progreso.
   if (analyzing) {
     return (
-      <s-page heading="Productos">
+      <s-page heading="Products">
         <s-link slot="breadcrumbActions" href="/app">
           Dashboard
         </s-link>
-        <s-section heading="Analizando tu tienda">
-          <JobProgress job={analysisJob} label="Analizando productos" />
+        <s-section heading="Analyzing your store">
+          <JobProgress job={analysisJob} label="Analyzing products" />
         </s-section>
       </s-page>
     );
   }
 
   return (
-    <s-page heading="Productos">
+    <s-page heading="Products">
       <s-box slot="breadcrumbActions" paddingBlockEnd="base">
         <s-button icon="arrow-left" variant="tertiary" href="/app">
           Dashboard
@@ -287,21 +287,21 @@ export default function Products() {
       )}
 
       {isStale && isAnalyzing && (
-        <s-banner tone="info" heading="Actualizando datos">
+        <s-banner tone="info" heading="Refreshing data">
           <s-paragraph>
-            Mostramos el último análisis disponible mientras refrescamos en
+            Showing the latest available analysis while we refresh in the
             background.
           </s-paragraph>
-          <JobProgress job={analysisJob} label="Re-analizando" />
+          <JobProgress job={analysisJob} label="Re-analyzing" />
         </s-banner>
       )}
 
       {!isPro && lockedCount > 0 && (
-        <s-banner tone="info" heading="Estás en el plan Free">
+        <s-banner tone="info" heading="You're on the Free plan">
           <s-paragraph>
-            Analizamos los primeros {planLimit} productos. Tienes {lockedCount}{" "}
-            producto{lockedCount === 1 ? "" : "s"} más esperando análisis.
-            Mejora a Pro para desbloquear todos.
+            We analyzed the first {planLimit} products. You have {lockedCount}{" "}
+            more product{lockedCount === 1 ? "" : "s"} waiting. Upgrade to Pro
+            to unlock them all.
           </s-paragraph>
         </s-banner>
       )}
@@ -310,8 +310,8 @@ export default function Products() {
         <s-stack direction="block" gap="base">
           <s-stack direction="inline" gap="base">
             <s-search-field
-              label="Buscar producto"
-              placeholder="Nombre o handle…"
+              label="Search products"
+              placeholder="Name or handle…"
               value={query}
               onInput={(event) => setQuery(event.target.value)}
             />
@@ -360,8 +360,8 @@ export default function Products() {
                 }}
               >
                 {isPro
-                  ? `Arreglar alt texts (${bulkFix.processable})`
-                  : `Pro: arreglar alt texts (${bulkFix.eligible})`}
+                  ? `Fix alt texts (${bulkFix.processable})`
+                  : `Pro: fix alt texts (${bulkFix.eligible})`}
               </s-button>
             )}
           </s-stack>
@@ -370,18 +370,18 @@ export default function Products() {
             <s-banner tone="info">
               <s-paragraph>
                 {items.length === 0
-                  ? "Esta tienda aún no tiene productos."
-                  : `Ningún producto coincide con "${query}".`}
+                  ? "This store doesn't have any products yet."
+                  : `No products match "${query}".`}
               </s-paragraph>
             </s-banner>
           ) : (
             <>
               <s-table>
                 <s-table-header-row>
-                  <s-table-header>Producto</s-table-header>
+                  <s-table-header>Product</s-table-header>
                   <s-table-header>Score</s-table-header>
                   <s-table-header>Issues</s-table-header>
-                  <s-table-header>Acción</s-table-header>
+                  <s-table-header>Action</s-table-header>
                 </s-table-header-row>
                 <s-table-body>
                   {pageRows.map((item) => (
@@ -415,14 +415,14 @@ export default function Products() {
                             command="--show"
                             commandFor="upgrade-modal"
                           >
-                            Desbloquear
+                            Unlock
                           </s-button>
                         ) : (
                           <s-button
                             variant="tertiary"
                             href={`/app/products/${gidToNumericId(item.productId)}`}
                           >
-                            Ver detalle
+                            View details
                           </s-button>
                         )}
                       </s-table-cell>
@@ -438,18 +438,18 @@ export default function Products() {
                     {...(currentPage === 1 ? { disabled: true } : {})}
                     onClick={() => setPage(currentPage - 1)}
                   >
-                    Anterior
+                    Previous
                   </s-button>
                   <s-text tone="subdued">
-                    Página {currentPage} de {totalPages} · {displayed.length}{" "}
-                    producto{displayed.length === 1 ? "" : "s"}
+                    Page {currentPage} of {totalPages} · {displayed.length}{" "}
+                    product{displayed.length === 1 ? "" : "s"}
                   </s-text>
                   <s-button
                     variant="tertiary"
                     {...(currentPage === totalPages ? { disabled: true } : {})}
                     onClick={() => setPage(currentPage + 1)}
                   >
-                    Siguiente
+                    Next
                   </s-button>
                 </s-stack>
               )}
@@ -461,27 +461,27 @@ export default function Products() {
       {isPro && bulkFix.eligible > 0 && (
         <s-modal
           id="bulk-alt-modal"
-          heading="Arreglar alt texts en lote"
+          heading="Fix alt texts in bulk"
         >
           <s-box paddingBlockEnd="base">
             <s-stack direction="block" gap="base">
               <s-paragraph>
-                Vamos a procesar <s-text>{bulkFix.processable}</s-text> producto
-                {bulkFix.processable === 1 ? "" : "s"} y agregar alt text a sus
-                imágenes faltantes.
+                We'll process <s-text>{bulkFix.processable}</s-text> product
+                {bulkFix.processable === 1 ? "" : "s"} and add alt text to
+                images that don't have it.
               </s-paragraph>
               {isBulkRunning && (
-                <JobProgress job={bulkJob} label="Aplicando alt texts" />
+                <JobProgress job={bulkJob} label="Applying alt texts" />
               )}
               {!isBulkRunning && isLoadingPreview && (
                 <s-stack direction="inline" gap="tight" alignment="center">
                   <s-spinner />
-                  <s-text tone="subdued">Generando ejemplos…</s-text>
+                  <s-text tone="subdued">Generating samples…</s-text>
                 </s-stack>
               )}
               {!isBulkRunning && !isLoadingPreview && samples && samples.length > 0 && (
                 <s-stack direction="block" gap="tight">
-                  <s-text tone="subdued">Ejemplos del patrón:</s-text>
+                  <s-text tone="subdued">Pattern samples:</s-text>
                   {samples.map((s, idx) => (
                     <s-text key={idx}>
                       {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
@@ -493,7 +493,7 @@ export default function Products() {
           </s-box>
           <s-stack direction="inline" gap="base" justifyContent="end">
             <s-button command="--hide" commandFor="bulk-alt-modal">
-              {isBulkRunning ? "Cerrar (sigue en background)" : "Cancelar"}
+              {isBulkRunning ? "Close (keeps running)" : "Cancel"}
             </s-button>
             <s-button
               variant="primary"
@@ -504,8 +504,8 @@ export default function Products() {
               }}
             >
               {isBulkRunning
-                ? "En curso…"
-                : `Aplicar a ${bulkFix.processable} producto${bulkFix.processable === 1 ? "" : "s"}`}
+                ? "Running…"
+                : `Apply to ${bulkFix.processable} product${bulkFix.processable === 1 ? "" : "s"}`}
             </s-button>
           </s-stack>
         </s-modal>
@@ -513,12 +513,12 @@ export default function Products() {
 
       <s-modal
         id="upgrade-modal"
-        heading="Mejora a Pro para desbloquear más productos"
+        heading="Upgrade to Pro to unlock more products"
       >
         <s-paragraph>
-          El plan Free analiza los primeros {planLimit} productos de tu tienda.
-          Con el plan Pro analizamos todos sin límite y desbloqueas el bulk fix
-          de alt texts.
+          The Free plan analyzes the first {planLimit} products in your store.
+          With the Pro plan, we analyze all of them with no limit and you
+          unlock bulk alt text fixes.
         </s-paragraph>
         <s-button
           slot="primaryAction"
@@ -526,14 +526,14 @@ export default function Products() {
           href={upgradeUrl}
           target="_top"
         >
-          Mejorar a Pro · $9/mes (7 días gratis)
+          Upgrade to Pro · $9/month (7-day free trial)
         </s-button>
         <s-button
           slot="secondaryActions"
           command="--hide"
           commandFor="upgrade-modal"
         >
-          Cerrar
+          Close
         </s-button>
       </s-modal>
     </s-page>
@@ -542,7 +542,7 @@ export default function Products() {
 
 /* eslint-disable react/prop-types */
 function ScoreBadge({ score, locked }) {
-  if (locked) return <s-badge tone="neutral">Bloqueado</s-badge>;
+  if (locked) return <s-badge tone="neutral">Locked</s-badge>;
   let tone = "critical";
   if (score >= 80) tone = "success";
   else if (score >= 50) tone = "caution";
@@ -551,13 +551,13 @@ function ScoreBadge({ score, locked }) {
 
 function IssuesSummary({ issues, locked }) {
   if (locked) return <s-text tone="subdued">—</s-text>;
-  if (issues.length === 0) return <s-text tone="subdued">Sin issues</s-text>;
+  if (issues.length === 0) return <s-text tone="subdued">No issues</s-text>;
   const counts = { high: 0, medium: 0, low: 0 };
   for (const i of issues) counts[i.impact]++;
   const parts = [];
-  if (counts.high) parts.push(`${counts.high} crítico${counts.high === 1 ? "" : "s"}`);
-  if (counts.medium) parts.push(`${counts.medium} medio${counts.medium === 1 ? "" : "s"}`);
-  if (counts.low) parts.push(`${counts.low} bajo${counts.low === 1 ? "" : "s"}`);
+  if (counts.high) parts.push(`${counts.high} critical`);
+  if (counts.medium) parts.push(`${counts.medium} medium`);
+  if (counts.low) parts.push(`${counts.low} low`);
   return <s-text>{parts.join(" · ")}</s-text>;
 }
 /* eslint-enable react/prop-types */
