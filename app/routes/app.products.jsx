@@ -466,9 +466,9 @@ export default function Products() {
           <s-box paddingBlockEnd="base">
             <s-stack direction="block" gap="base">
               <s-paragraph>
-                We'll process <s-text>{bulkFix.processable}</s-text> product
+                We&apos;ll process <s-text>{bulkFix.processable}</s-text> product
                 {bulkFix.processable === 1 ? "" : "s"} and add alt text to
-                images that don't have it.
+                images that don&apos;t have it.
               </s-paragraph>
               {isBulkRunning && (
                 <JobProgress job={bulkJob} label="Applying alt texts" />

@@ -73,7 +73,7 @@ export function ErrorBoundary() {
         <s-section>
           <s-banner tone="critical" heading="Session expired">
             <s-paragraph>
-              This app's permissions changed. Reinstall to continue.
+              This app&apos;s permissions changed. Reinstall to continue.
             </s-paragraph>
             <s-paragraph>
               In your store admin, go to Settings → Apps, uninstall this app,

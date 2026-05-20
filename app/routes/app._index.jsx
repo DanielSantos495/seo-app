@@ -175,7 +175,7 @@ export default function Index() {
         <s-section heading="Analyzing your store">
           <s-stack direction="block" gap="base">
             <s-paragraph>
-              We're analyzing all your products for the first time. This can
+              We&apos;re analyzing all your products for the first time. This can
               take a few minutes for large stores — you can close this tab and
               the analysis will keep running in the background.
             </s-paragraph>
@@ -332,7 +332,7 @@ export default function Index() {
       {report.totalProducts === 0 && (
         <s-section heading="No products">
           <s-paragraph>
-            This store doesn't have any products yet. Create some in your
+            This store doesn&apos;t have any products yet. Create some in your
             Shopify admin, then come back to see the analysis.
           </s-paragraph>
         </s-section>

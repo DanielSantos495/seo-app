@@ -201,8 +201,8 @@ export default function ProductDetail() {
           heading={`Preview: ${proposedAlts.length} alt text${proposedAlts.length === 1 ? "" : "s"}`}
         >
           <s-paragraph>
-            We'll add alt text to images that don't have it. Images with
-            existing alt text won't be changed.
+            We&apos;ll add alt text to images that don&apos;t have it. Images
+            with existing alt text won&apos;t be changed.
           </s-paragraph>
           <s-stack direction="block" gap="tight">
             {proposedAlts.map((p) => (
@@ -250,8 +250,9 @@ export default function ProductDetail() {
           heading="Upgrade to Pro to fix alt texts"
         >
           <s-paragraph>
-            Bulk alt text fixes are a Pro plan feature. Turn it on and we'll
-            generate descriptive alt text for all your images in one click.
+            Bulk alt text fixes are a Pro plan feature. Turn it on and
+            we&apos;ll generate descriptive alt text for all your images in
+            one click.
           </s-paragraph>
           <s-button
             slot="primaryAction"

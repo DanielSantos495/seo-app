@@ -61,8 +61,8 @@ export default function Upgrade() {
           <s-spinner />
           <s-heading>Taking you to the Shopify payment page…</s-heading>
           <s-paragraph tone="subdued">
-            You'll approve the charge on Shopify's official page. If you're
-            not redirected in a few seconds,{" "}
+            You&apos;ll approve the charge on Shopify&apos;s official page. If
+            you&apos;re not redirected in a few seconds,{" "}
             <s-link href={confirmationUrl}>click here</s-link>.
           </s-paragraph>
         </s-stack>
