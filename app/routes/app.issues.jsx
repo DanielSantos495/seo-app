@@ -24,7 +24,7 @@ import BulkFixSummaryBanner from "../components/BulkFixSummaryBanner";
 const MAX_VISIBLE_PRODUCTS = 5;
 
 const IMPACT_TONE = { high: "critical", medium: "caution", low: "info" };
-const IMPACT_LABEL = { high: "Crítico", medium: "Medio", low: "Bajo" };
+const IMPACT_LABEL = { high: "Critical", medium: "Medium", low: "Low" };
 const IMPACT_ORDER = { high: 0, medium: 1, low: 2 };
 
 function groupIssuesByField(items) {
@@ -134,14 +134,14 @@ export const action = async ({ request }) => {
   const isPro = await checkIsPro(billing, session.shop);
   if (!isPro) {
     return new Response(
-      JSON.stringify({ error: "Esta acción es solo para plan Pro" }),
+      JSON.stringify({ error: "This action is only available on the Pro plan" }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
   }
 
   const cached = await getCachedItems(session.shop, "pro");
   if (!cached) {
-    return { ok: false, error: "Cache no disponible. Recargá la página." };
+    return { ok: false, error: "Cache unavailable. Reload the page." };
   }
   const eligibleGids = cached.eligibleAltGids;
   if (eligibleGids.length === 0) {
@@ -205,12 +205,12 @@ export default function Issues() {
         const totalImages = summary.totalImages || 0;
         const ok = (summary.totalProducts || 0) - errCount;
         if (totalImages === 0 && summary.totalProducts === 0) {
-          shopify.toast.show("No había alt texts para agregar");
+          shopify.toast.show("No alt texts to add");
         } else if (totalImages === 0) {
-          shopify.toast.show("Productos ya tenían alt — listado actualizado");
+          shopify.toast.show("Products already had alt text — list updated");
         } else {
           shopify.toast.show(
-            `Listo: ${ok} producto${ok === 1 ? "" : "s"} · ${totalImages} alt text${totalImages === 1 ? "" : "s"}${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "es"}` : ""}`,
+            `Done: ${ok} product${ok === 1 ? "" : "s"} · ${totalImages} alt text${totalImages === 1 ? "" : "s"} added${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "s"}` : ""}`,
             errCount ? { isError: true } : undefined,
           );
         }
@@ -238,8 +238,8 @@ export default function Issues() {
             Dashboard
           </s-button>
         </s-box>
-        <s-section heading="Analizando tu tienda">
-          <JobProgress job={analysisJob} label="Analizando productos" />
+        <s-section heading="Analyzing your store">
+          <JobProgress job={analysisJob} label="Analyzing products" />
         </s-section>
       </s-page>
     );
@@ -261,23 +261,23 @@ export default function Issues() {
       )}
 
       {isStale && isAnalyzing && (
-        <s-banner tone="info" heading="Actualizando datos">
+        <s-banner tone="info" heading="Refreshing data">
           <s-paragraph>
-            Mostramos el último análisis disponible mientras refrescamos en
+            Showing the latest available analysis while we refresh in the
             background.
           </s-paragraph>
-          <JobProgress job={analysisJob} label="Re-analizando" />
+          <JobProgress job={analysisJob} label="Re-analyzing" />
         </s-banner>
       )}
 
       {groups.length === 0 ? (
         <s-section>
-          <s-banner tone="success" heading="Sin issues detectados">
+          <s-banner tone="success" heading="No issues found">
             <s-paragraph>
-              Tu catálogo cumple los criterios SEO. Buen trabajo.
+              Your catalog meets the SEO criteria. Nice work.
             </s-paragraph>
             <s-button slot="secondaryActions" href="/app">
-              Volver al dashboard
+              Back to dashboard
             </s-button>
           </s-banner>
         </s-section>
@@ -293,7 +293,7 @@ export default function Issues() {
                   {IMPACT_LABEL[group.impact]}
                 </s-badge>
                 <s-text>
-                  {group.productsCount} producto
+                  {group.productsCount} product
                   {group.productsCount === 1 ? "" : "s"} · {group.issuesCount}{" "}
                   issue{group.issuesCount === 1 ? "" : "s"}
                 </s-text>
@@ -302,8 +302,8 @@ export default function Issues() {
 
               <s-table>
                 <s-table-header-row>
-                  <s-table-header>Producto</s-table-header>
-                  <s-table-header>Acción</s-table-header>
+                  <s-table-header>Product</s-table-header>
+                  <s-table-header>Action</s-table-header>
                 </s-table-header-row>
                 <s-table-body>
                   {(expandedGroups[group.field]
@@ -329,7 +329,7 @@ export default function Issues() {
                           variant="tertiary"
                           href={`/app/products/${gidToNumericId(p.productId)}`}
                         >
-                          Ver detalle
+                          View details
                         </s-button>
                       </s-table-cell>
                     </s-table-row>
@@ -343,8 +343,8 @@ export default function Issues() {
                   onClick={() => toggleExpand(group.field)}
                 >
                   {expandedGroups[group.field]
-                    ? "Ver menos"
-                    : `Ver ${group.productsCount - MAX_VISIBLE_PRODUCTS} más`}
+                    ? "Show less"
+                    : `Show ${group.productsCount - MAX_VISIBLE_PRODUCTS} more`}
                 </s-button>
               )}
 
@@ -360,8 +360,8 @@ export default function Issues() {
                   }}
                 >
                   {isPro
-                    ? `Arreglar todos (${bulkFix.processable})`
-                    : `Pro: arreglar todos (${bulkFix.eligible})`}
+                    ? `Fix all (${bulkFix.processable})`
+                    : `Pro: fix all (${bulkFix.eligible})`}
                 </s-button>
               )}
             </s-stack>
@@ -370,26 +370,26 @@ export default function Issues() {
       )}
 
       {isPro && bulkFix.eligible > 0 && (
-        <s-modal id="bulk-alt-modal" heading="Arreglar alt texts en lote">
+        <s-modal id="bulk-alt-modal" heading="Fix alt texts in bulk">
           <s-box paddingBlockEnd="base">
             <s-stack direction="block" gap="base">
               <s-paragraph>
-                Vamos a procesar <s-text>{bulkFix.processable}</s-text> producto
-                {bulkFix.processable === 1 ? "" : "s"} y agregar alt text a sus
-                imágenes faltantes.
+                We'll process <s-text>{bulkFix.processable}</s-text> product
+                {bulkFix.processable === 1 ? "" : "s"} and add alt text to
+                images that don't have it.
               </s-paragraph>
               {isBulkRunning && (
-                <JobProgress job={bulkJob} label="Aplicando alt texts" />
+                <JobProgress job={bulkJob} label="Applying alt texts" />
               )}
               {!isBulkRunning && isLoadingPreview && (
                 <s-stack direction="inline" gap="tight" alignment="center">
                   <s-spinner />
-                  <s-text tone="subdued">Generando ejemplos…</s-text>
+                  <s-text tone="subdued">Generating samples…</s-text>
                 </s-stack>
               )}
               {!isBulkRunning && !isLoadingPreview && samples && samples.length > 0 && (
                 <s-stack direction="block" gap="tight">
-                  <s-text tone="subdued">Ejemplos del patrón:</s-text>
+                  <s-text tone="subdued">Pattern samples:</s-text>
                   {samples.map((s, idx) => (
                     <s-text key={idx}>
                       {s.productTitle} → &ldquo;{s.sampleAlt}&rdquo;
@@ -401,7 +401,7 @@ export default function Issues() {
           </s-box>
           <s-stack direction="inline" gap="base" justifyContent="end">
             <s-button command="--hide" commandFor="bulk-alt-modal">
-              {isBulkRunning ? "Cerrar (sigue en background)" : "Cancelar"}
+              {isBulkRunning ? "Close (keeps running)" : "Cancel"}
             </s-button>
             <s-button
               variant="primary"
@@ -412,18 +412,18 @@ export default function Issues() {
               }}
             >
               {isBulkRunning
-                ? "En curso…"
-                : `Aplicar a ${bulkFix.processable} producto${bulkFix.processable === 1 ? "" : "s"}`}
+                ? "Running…"
+                : `Apply to ${bulkFix.processable} product${bulkFix.processable === 1 ? "" : "s"}`}
             </s-button>
           </s-stack>
         </s-modal>
       )}
 
       {!isPro && bulkFix.eligible > 0 && (
-        <s-modal id="upgrade-modal" heading="Mejora a Pro para usar bulk fix">
+        <s-modal id="upgrade-modal" heading="Upgrade to Pro to use bulk fix">
           <s-paragraph>
-            El bulk fix de alt texts es exclusivo del plan Pro. Activalo y
-            generamos alt text descriptivo para todas las imágenes en un click.
+            Bulk alt text fixes are a Pro plan feature. Turn it on and we'll
+            generate descriptive alt text for all images in one click.
           </s-paragraph>
           <s-button
             slot="primaryAction"
@@ -431,14 +431,14 @@ export default function Issues() {
             href={upgradeUrl}
             target="_top"
           >
-            Mejorar a Pro · $9/mes (7 días gratis)
+            Upgrade to Pro · $9/month (7-day free trial)
           </s-button>
           <s-button
             slot="secondaryActions"
             command="--hide"
             commandFor="upgrade-modal"
           >
-            Cerrar
+            Close
           </s-button>
         </s-modal>
       )}
