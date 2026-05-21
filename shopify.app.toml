@@ -2,12 +2,11 @@
 
 client_id = "bbd179e9f5f501e3917e14dd5297389c"
 name = "seo-app"
-application_url = "https://example.com"
+application_url = "https://seo-app-production-b4fa.up.railway.app"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-04"
@@ -38,4 +37,4 @@ api_version = "2026-04"
 scopes = "read_products,read_content,write_products"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://seo-app-production-b4fa.up.railway.app/api/auth" ]
