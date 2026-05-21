@@ -324,11 +324,11 @@ export default function Products() {
               {SORT_OPTIONS.find((o) => o.value === sortKey)?.label}
             </s-button>
             <s-popover id="sort-popover" inlineSize="280">
-              <s-stack direction="block" gap="none" padding="tight">
+              <s-stack direction="block" gap="none" padding="small-300">
                 {SORT_OPTIONS.map((opt) => (
                   <s-clickable
                     key={opt.value}
-                    padding="base"
+                    padding="small-300"
                     onClick={() => {
                       setSortKey(opt.value);
                       document.getElementById("sort-popover")?.hideOverlay?.();
@@ -338,7 +338,7 @@ export default function Products() {
                       direction="inline"
                       alignment="center"
                       justifyContent="space-between"
-                      gap="tight"
+                      gap="small-300"
                     >
                       <s-text>{opt.label}</s-text>
                       {sortKey === opt.value && <s-icon type="check" />}
@@ -396,7 +396,7 @@ export default function Products() {
                               loading="lazy"
                             />
                           )}
-                          <s-stack direction="block" gap="tight">
+                          <s-stack direction="block" gap="small-300">
                             <s-text>{item.title}</s-text>
                             <s-text tone="subdued">{item.handle}</s-text>
                           </s-stack>
@@ -474,13 +474,13 @@ export default function Products() {
                 <JobProgress job={bulkJob} label="Applying alt texts" />
               )}
               {!isBulkRunning && isLoadingPreview && (
-                <s-stack direction="inline" gap="tight" alignment="center">
+                <s-stack direction="inline" gap="small-300" alignment="center">
                   <s-spinner />
                   <s-text tone="subdued">Generating samples…</s-text>
                 </s-stack>
               )}
               {!isBulkRunning && !isLoadingPreview && samples && samples.length > 0 && (
-                <s-stack direction="block" gap="tight">
+                <s-stack direction="block" gap="small-300">
                   <s-text tone="subdued">Pattern samples:</s-text>
                   {samples.map((s, idx) => (
                     <s-text key={idx}>

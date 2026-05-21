@@ -85,8 +85,8 @@ export function JobProgress({ job, label = "Processing" }) {
   }
 
   return (
-    <s-stack direction="block" gap="tight">
-      <s-stack direction="inline" gap="tight" alignment="center">
+    <s-stack direction="block" gap="small-300">
+      <s-stack direction="inline" gap="small-300" alignment="center">
         <s-spinner />
         <s-text>
           {label}

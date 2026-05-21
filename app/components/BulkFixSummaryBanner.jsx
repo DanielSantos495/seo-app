@@ -61,7 +61,7 @@ export default function BulkFixSummaryBanner({ summary, onDismiss }) {
       </s-paragraph>
 
       {hasErrors && (
-        <s-stack direction="block" gap="tight">
+        <s-stack direction="block" gap="small-300">
           <s-text tone="subdued">Products with errors:</s-text>
           {errors.slice(0, 10).map((e, idx) => (
             <s-text key={idx} tone="critical">

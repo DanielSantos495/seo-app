@@ -134,16 +134,11 @@ export default function ProductDetail() {
 
   return (
     <s-page heading={product.title}>
-      <s-button slot="breadcrumbActions" icon="arrow-left" variant="tertiary" href="/app/products">
-        Products
-      </s-button>
-      <s-button
-        slot="primaryAction"
-        variant="primary"
-        href={editUrl}
-      >
-        Edit in Shopify
-      </s-button>
+      <s-stack slot="breadcrumbActions" paddingBlockEnd="base">
+        <s-button icon="arrow-left" variant="tertiary" href="/app/products">
+          Products
+        </s-button>
+      </s-stack>
 
       <s-section heading="SEO summary">
         <s-stack direction="inline" gap="large" alignment="center">
@@ -155,7 +150,7 @@ export default function ProductDetail() {
               loading="lazy"
             />
           )}
-          <s-stack direction="block" gap="tight">
+          <s-stack direction="block" gap="small-300">
             <s-stack direction="inline" gap="base" alignment="center">
               <s-heading size="large">{analysis.score}/100</s-heading>
               <s-badge tone={SCORE_TONE(analysis.score)}>
@@ -204,7 +199,7 @@ export default function ProductDetail() {
             We&apos;ll add alt text to images that don&apos;t have it. Images
             with existing alt text won&apos;t be changed.
           </s-paragraph>
-          <s-stack direction="block" gap="tight">
+          <s-stack direction="block" gap="small-300">
             {proposedAlts.map((p) => (
               <s-stack
                 key={p.imageId}
@@ -274,7 +269,7 @@ export default function ProductDetail() {
 
       <s-section slot="aside" heading="Current data">
         <s-stack direction="block" gap="base">
-          <s-stack direction="block" gap="tight">
+          <s-stack direction="block" gap="small-300">
             <s-text tone="subdued">Meta title</s-text>
             {product.seo.title ? (
               <s-text>{product.seo.title}</s-text>
@@ -282,7 +277,7 @@ export default function ProductDetail() {
               <s-text tone="critical">Empty</s-text>
             )}
           </s-stack>
-          <s-stack direction="block" gap="tight">
+          <s-stack direction="block" gap="small-300">
             <s-text tone="subdued">Meta description</s-text>
             {product.seo.description ? (
               <s-text>
@@ -293,7 +288,7 @@ export default function ProductDetail() {
               <s-text tone="critical">Empty</s-text>
             )}
           </s-stack>
-          <s-stack direction="block" gap="tight">
+          <s-stack direction="block" gap="small-300">
             <s-text tone="subdued">Images</s-text>
             <s-text>
               {product.images.length} ·{" "}
@@ -309,9 +304,11 @@ export default function ProductDetail() {
 export function ErrorBoundary() {
   return (
     <s-page heading="Product not found">
-      <s-button slot="breadcrumbActions" icon="arrow-left" variant="tertiary" href="/app/products">
-        Products
-      </s-button>
+      <s-stack slot="breadcrumbActions" paddingBlockEnd="base">
+        <s-button icon="arrow-left" variant="tertiary" href="/app/products">
+          Products
+        </s-button>
+      </s-stack>
       <s-section>
         <s-banner tone="critical" heading="We couldn't load this product">
           <s-paragraph>

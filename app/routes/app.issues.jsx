@@ -382,13 +382,13 @@ export default function Issues() {
                 <JobProgress job={bulkJob} label="Applying alt texts" />
               )}
               {!isBulkRunning && isLoadingPreview && (
-                <s-stack direction="inline" gap="tight" alignment="center">
+                <s-stack direction="inline" gap="small-300" alignment="center">
                   <s-spinner />
                   <s-text tone="subdued">Generating samples…</s-text>
                 </s-stack>
               )}
               {!isBulkRunning && !isLoadingPreview && samples && samples.length > 0 && (
-                <s-stack direction="block" gap="tight">
+                <s-stack direction="block" gap="small-300">
                   <s-text tone="subdued">Pattern samples:</s-text>
                   {samples.map((s, idx) => (
                     <s-text key={idx}>

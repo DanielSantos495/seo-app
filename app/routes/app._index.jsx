@@ -290,7 +290,7 @@ export default function Index() {
                 borderRadius="base"
                 background="subdued"
               >
-                <s-stack direction="block" gap="tight" alignment="center">
+                <s-stack direction="block" gap="small-300" alignment="center">
                   <s-heading>{count}</s-heading>
                   <s-text tone={tone}>{label}</s-text>
                 </s-stack>
@@ -314,7 +314,7 @@ export default function Index() {
               >
                 <s-stack direction="inline" gap="base" alignment="center">
                   <s-heading>{product.score}</s-heading>
-                  <s-stack direction="block" gap="tight">
+                  <s-stack direction="block" gap="small-300">
                     <s-text>{product.title}</s-text>
                     <s-text tone="subdued">
                       {product.issues.length} issue

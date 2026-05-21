@@ -10,7 +10,7 @@
 function SkeletonBox({ height = "1.2rem", width = "100%" }) {
   return (
     <s-box
-      padding="tight"
+      padding="large"
       borderWidth="base"
       borderRadius="base"
       background="subdued"
@@ -67,7 +67,7 @@ function IssuesSkeleton() {
     <s-page heading="Issues">
       {Array.from({ length: 3 }).map((_, i) => (
         <s-section key={i} heading="…">
-          <s-stack direction="block" gap="tight">
+          <s-stack direction="block" gap="small-300">
             <SkeletonBox width="40%" />
             <SkeletonBox width="80%" />
             <SkeletonBox height="2.5rem" />
@@ -84,14 +84,14 @@ function ProductDetailSkeleton() {
       <s-section heading="SEO summary">
         <s-stack direction="inline" gap="large" alignment="center">
           <SkeletonBox height="120px" width="120px" />
-          <s-stack direction="block" gap="tight">
+          <s-stack direction="block" gap="small-300">
             <SkeletonBox height="2rem" width="120px" />
             <SkeletonBox width="200px" />
           </s-stack>
         </s-stack>
       </s-section>
       <s-section heading="Issues to fix">
-        <s-stack direction="block" gap="tight">
+        <s-stack direction="block" gap="small-300">
           {Array.from({ length: 3 }).map((_, i) => (
             <SkeletonBox key={i} height="4rem" />
           ))}
