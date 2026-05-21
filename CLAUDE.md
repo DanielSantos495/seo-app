@@ -1,6 +1,17 @@
 # CLAUDE.md — Shopify SEO Analyzer
 > Contexto completo del proyecto para Claude Code.
-> Última actualización: 2026-05-12 (MVP funcional cerrado; pendiente deploy + listing)
+> Última actualización: 2026-05-19 (MVP funcional cerrado; pendiente deploy + listing; estrategia de marketing y lanzamiento definida).
+
+---
+
+## 🧭 Quick context (TL;DR para Claude Code)
+
+- **Qué es:** app pública del Shopify App Store que audita el SEO de los productos de una tienda y permite arreglar issues comunes en bulk.
+- **Negocio:** freemium con plan Pro $9/mes (7 días trial). Revenue share 0% en los primeros $1M USD vitalicios.
+- **Mercado objetivo:** **global, inglés primero** (US/UK/AU/CA = ~70% del mercado Shopify). Ver `/marketing/seo-app/launch-strategy.md`.
+- **Idioma del listing y UI: inglés.** La UI actual aún tiene strings en español; la migración a EN se hará con el prompt `/marketing/seo-app/prompts/i18n-es-to-en.md` antes del envío a review.
+- **Estado:** MVP funcional cerrado (todo el flujo install → análisis → upgrade → bulk fix → export funciona). Falta deploy a Railway + listing en App Store.
+- **Stack:** React Router v7 (no Remix) + Polaris Web Components + Prisma + GraphQL Admin API 2026-04 + Shopify Billing API.
 
 ---
 
@@ -398,6 +409,42 @@ const shopify = shopifyApp({
 
 ---
 
+## 📣 Marketing & Lanzamiento
+
+> Plan completo y vivo: [`/marketing/seo-app/launch-strategy.md`](../marketing/seo-app/launch-strategy.md)
+> Prompts operativos del lanzamiento: [`/marketing/seo-app/prompts/`](../marketing/seo-app/prompts/)
+
+### Contexto comercial
+- **Mercado:** global, inglés primero. Listing 100% en inglés. UI también en inglés (migración pendiente).
+- **Presupuesto ads primeros 3 meses:** $0–$50 USD/mes → estrategia 95% orgánica.
+- **Presencia digital inicial:** cero — todas las cuentas (X, LinkedIn, YouTube, Reddit, IH, PH) se crean pre-launch.
+- **Ventaja competitiva:** 0% revenue share Shopify en primeros $1M (margen para competir en precio o reinvertir en producto).
+
+### Estrategia en 3 fases (resumen)
+1. **Pre-launch (sem 1–3):** deploy Railway, dominio `.app`, landing en Cloudflare Pages, Privacy + ToS, screenshots + video demo, cuentas en redes (handle consistente). Construir karma en Reddit antes de promocionar.
+2. **Launch (sem 4–6):** **ASO** agresivo (App Store search ≈ 70% de descubrimiento), Product Hunt coordinado con hunter externo, outreach manual 1-a-1 con auditoría SEO gratis como gancho, primeras 10 reviews ⭐⭐⭐⭐⭐.
+3. **Growth (mes 2–4):** blog SEO sobre SEO (meta-juego), 1 video YouTube cada 2 semanas, comunidades sostenidas (r/shopify, Indie Hackers, Shopify Community), Google Ads $50/mes **solo** cuando la landing convierta ≥3%.
+
+### Targets realistas (con bootstrap real)
+- Mes 3 post-launch: 30–80 installs Free, $18–54 MRR
+- Mes 6: 100–180 installs Free, 8–15 Pro, $72–135 MRR
+- Mes 12: 250–350 installs Free, 25–45 Pro, $225–405 MRR
+
+> Para acercarse al target original del proyecto ($2,850–$5,700 MRR año 1) sin aumentar presupuesto: (a) subir Pro a $14–19/mes tras validar PMF, o (b) adelantar V2 (AI) a $19–29/mes. Detalle en §0 del plan.
+
+### Palancas asimétricas priorizadas
+1. **ASO** — keywords long-tail tier 2/3 primero (`shopify alt text`, `shopify seo score`, `bulk seo`) antes de pelear por tier 1 (`shopify seo`).
+2. **Comunidades** — r/shopify, Indie Hackers, Shopify Community Forum, Shopify Partners Slack.
+3. **Contenido SEO sobre SEO** — la app vende SEO; el blog público es la prueba viva.
+4. **Outreach manual** — auditorías personalizadas a stores con problemas SEO detectables, gancho con Pro free 3 meses.
+5. **Product Hunt** — único día de tráfico masivo gratis; reservar con 60 días de anticipación.
+
+### Decisión binaria de ads (mes 4)
+- CAC < $25 y conversión Free→Pro > 5% → escalar a $100/mes.
+- CAC > $30 → pausar Google Ads, volver 100% orgánico hasta resolver landing/listing.
+
+---
+
 ## 🤖 Objetivo a largo plazo — Sidekick Extension
 
 Shopify lanzó en Winter '26 el developer preview de **Sidekick App Extensions**.
@@ -433,7 +480,8 @@ Documentación técnica:
 - Loaders/actions de **React Router v7** (`export const loader`, `export const action`) — equivalentes a los de Remix
 - Lógica de negocio (scoring) en `app/services/` — funciones puras, fáciles de testear
 - Queries GraphQL en `app/services/shopify-api.js` — separadas del UI
-- Comentarios en español — es el idioma del desarrollador
+- Comentarios e identificadores internos en español — idioma del desarrollador
+- **Strings user-facing (UI, mensajes de error, mensajes de fix, copy de botones) en inglés** — el mercado objetivo es global/EN. La UI inicial se desarrolló en español y se migrará a inglés antes del envío a review usando el prompt `/marketing/seo-app/prompts/i18n-es-to-en.md`. No mezclar: si una string termina renderizándose para el merchant, va en inglés sin excepciones.
 
 ---
 
