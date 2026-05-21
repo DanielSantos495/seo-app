@@ -15,9 +15,13 @@ database.sqlite
 
 .env
 .env.*
+!.env.example
 
+# Logs
+*.log
 
-
+# Vite cache
+.vite/
 
 
 /extensions/*/dist
