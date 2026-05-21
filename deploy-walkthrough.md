@@ -277,4 +277,55 @@ Ambos los resolvemos a continuación:
 
 ---
 
+---
+
+## Apéndice — Migración npm → pnpm (mayo 2026, mid-§5)
+
+### Motivación
+
+Durante la preparación del §5 (Railway) detectamos vulnerabilidades activas del registry npm (Shai-Hulud worm 2025, TeamPCP / Mini Shai-Hulud 2026: ~170 paquetes comprometidos incluyendo TanStack, Mistral AI, UiPath). La recomendación industrial es migrar a **pnpm v11**, que trae como defaults:
+
+- `ignore-scripts` por default — bloquea `postinstall` salvo allowlist explícita (vector principal del worm).
+- `minimumReleaseAge=1440` (24h) — no resuelve versiones publicadas hace menos de 1 día (la ventana donde se descubren los compromisos).
+- Detección de credential compromise.
+
+### Pasos ejecutados
+
+1. **Upgrade Node**: `nvm install 22 --lts && nvm alias default 22` → Node v22.22.3 (pnpm v11 requiere ≥22.13, el proyecto ya declaraba `>=22.12` en `engines`).
+2. **Instalar pnpm**: `corepack enable && corepack prepare pnpm@latest --activate` → pnpm 11.2.2.
+   - Inicialmente falló con corepack 0.29.3 (claves de firma caducadas). Resuelto con `npm install -g corepack@latest` (0.35.0+) bajo Node 22.
+3. **Crear `pnpm-workspace.yaml`** con:
+   - `packages: ["extensions/*"]` — reemplaza el campo `workspaces` del package.json (que pnpm NO lee).
+   - `allowBuilds:` mapa booleano — declara los 6 paquetes con scripts de build aprobados: `@parcel/watcher`, `@prisma/client`, `@prisma/engines`, `esbuild`, `prisma`, `unrs-resolver`. Sin esto, `pnpm install` los bloquea por seguridad.
+   - `overrides: p-map: ^4.0.0` — migrado del antiguo `overrides` del package.json (pnpm v11 ya no lo lee desde ahí).
+4. **Limpiar `package.json`**:
+   - Eliminar `workspaces` (movido a yaml).
+   - Eliminar bloque `pnpm.overrides` (movido a yaml).
+   - Añadir `"packageManager": "pnpm@11.2.2"` → corepack/CI usan exactamente esta versión.
+5. **Eliminar `package-lock.json`** (`git rm`) y generar `pnpm-lock.yaml` con `pnpm install`.
+6. **Actualizar `Dockerfile`**:
+   - `FROM node:20-alpine` → `FROM node:22-alpine`.
+   - Añadir `RUN corepack enable` para habilitar pnpm en el container.
+   - `COPY package-lock.json` → `COPY pnpm-lock.yaml pnpm-workspace.yaml`.
+   - `RUN npm ci --omit=dev` → `RUN pnpm install --frozen-lockfile` (sin `--prod` para que vite/devDeps estén disponibles en el build step).
+   - `RUN npm run build` → `RUN pnpm run build && pnpm prune --prod` (prune después de build elimina devDeps del runtime).
+   - `CMD ["npm", "run", "docker-start"]` → `CMD ["pnpm", "run", "docker-start"]`.
+7. **Actualizar script `docker-start`** en package.json: `npm run setup && npm run start` → `pnpm run setup && pnpm run start`.
+
+### Verificación
+
+```bash
+pnpm --version       # 11.2.2
+pnpm run build       # ✓ built in 182ms
+pnpm run lint        # ✓ exit clean
+```
+
+### Implicación para el deploy Railway (§5+)
+
+- El container Node 22 cumple `engines` del package.json.
+- Railway debe re-detectar el Dockerfile y rebuildar. La primera vez instalará pnpm vía corepack (~10s extra en el build).
+- En el smoke test post-deploy verificar que `prisma migrate deploy` se ejecuta correctamente con el nuevo flow (`pnpm run docker-start` → `pnpm run setup` → `prisma generate && prisma migrate deploy`).
+
+---
+
 *Bitácora viva. Se actualiza al ejecutar cada task.*
