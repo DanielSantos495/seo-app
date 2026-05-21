@@ -215,4 +215,66 @@ Estado al terminar las 4 tasks:
 
 ---
 
+---
+
+## §5 — Provisionar Railway: app + Postgres
+
+### ¿Qué estamos haciendo?
+
+Levantamos en Railway dos servicios dentro del mismo proyecto:
+
+1. **`seo-app`** — el container Docker de la app. Railway lee el `Dockerfile` y construye/corre.
+2. **`Postgres`** — DB managed de Railway. Te da `DATABASE_URL` automáticamente y la app la consume.
+
+Ambos servicios viven en el mismo "project", lo que permite usar referencias internas tipo `${{Postgres.DATABASE_URL}}` en las variables del servicio app — Railway resuelve la referencia en runtime y no expone la URL plana en tu config.
+
+### Estado al llegar al paso 7
+
+- Proyecto creado en Railway
+- Servicio `seo-app` conectado al repo `DanielSantos495/seo-app`, branch `feature/deploy-prep`
+- Postgres provisionado y Active
+- **Pendiente:** setear env vars del servicio app (sin esto, el container no arranca o arranca pero falla OAuth/billing/DB)
+
+### Variables a configurar (paso 7)
+
+Se pegan en el servicio `seo-app` → tab **Variables** → **Raw Editor**:
+
+```
+SHOPIFY_API_KEY=bbd179e9f5f501e3917e14dd5297389c
+SHOPIFY_API_SECRET=<copiar del Partner Dashboard>
+SCOPES=read_products,read_content,write_products
+SHOPIFY_APP_URL=https://placeholder.up.railway.app
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+BILLING_TEST=false
+NODE_ENV=production
+```
+
+**Notas por variable:**
+
+| Variable | Por qué este valor |
+|---|---|
+| `SHOPIFY_API_KEY` | Ya lo conocemos: está en `shopify.app.toml` como `client_id`. Es público, no es secreto. |
+| `SHOPIFY_API_SECRET` | Solo está en Partner Dashboard. Daniel lo copia. |
+| `SCOPES` | Idéntico a `shopify.app.toml`. |
+| `SHOPIFY_APP_URL` | **Placeholder temporal** — lo actualizamos en §6 con la URL real Railway. Si no se pone NADA, la app crashea al import. |
+| `DATABASE_URL` | Referencia interna Railway. `${{Postgres.DATABASE_URL}}` resuelve a la URL del Postgres del mismo proyecto. NO pegar la URL plana. |
+| `BILLING_TEST` | `false` en prod = Shopify cobra de verdad. Sin esto los Pro charges nunca se efectúan. |
+| `NODE_ENV` | `production` — React Router y Polaris optimizan asumiendo este valor. |
+
+> **Por qué NO seteamos `PORT`:** Railway lo inyecta automáticamente como var del sistema. `react-router-serve` lo lee. Setearlo manualmente puede romper el routing interno.
+
+### Tras pegar las vars
+
+Railway redeploya el servicio. El build/start va a fallar todavía porque:
+
+- La DB Postgres está vacía (sin schema). `prisma migrate deploy` no tiene migraciones que aplicar (las borramos en §4.1 y la migración Postgres consolidada aún no existe).
+- El SHOPIFY_APP_URL es placeholder; OAuth no va a funcionar contra Shopify.
+
+Ambos los resolvemos a continuación:
+
+- **§5.4** — generar la migración Postgres inicial contra Railway.
+- **§6** — actualizar SHOPIFY_APP_URL con la URL real Railway + sync `shopify.app.toml`.
+
+---
+
 *Bitácora viva. Se actualiza al ejecutar cada task.*
