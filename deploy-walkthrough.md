@@ -103,4 +103,80 @@ ls node_modules/@prisma/client/
 
 ---
 
-*Las tasks 4.2, 4.3 y 4.4 se documentan a continuación a medida que las ejecutamos.*
+---
+
+## Task 4.2 — Expandir `.env.example`
+
+### ¿Qué cambia?
+
+El `.env.example` actual solo tiene `BILLING_TEST = true`. Lo reemplazamos por el bloque completo de variables que la app necesita en Railway.
+
+### ¿Por qué importa `.env.example`?
+
+Tres razones:
+
+1. **Documentación viva.** Cualquiera que clone el repo ve EXACTAMENTE qué variables hay que setear. Sin esto, leer el código fuente para descubrir cada `process.env.X` es tedioso.
+2. **Auditoría.** En el deploy a Railway pegamos las variables; tener el listado evita olvidos (`BILLING_TEST` olvidado = no se cobra en prod).
+3. **Onboarding futuro.** Si llega un colaborador o vuelves al proyecto en 6 meses, sirve como contrato.
+
+### Variables que vamos a documentar
+
+| Variable | Origen | Ejemplo prod | Crítica |
+|---|---|---|---|
+| `SHOPIFY_API_KEY` | Partner Dashboard → App → Client credentials | `bbd179e9...` | Sí (auth) |
+| `SHOPIFY_API_SECRET` | Partner Dashboard → App → Client credentials | (secret) | Sí (auth + HMAC webhooks) |
+| `SCOPES` | `shopify.app.toml` | `read_products,read_content,write_products` | Sí |
+| `SHOPIFY_APP_URL` | URL pública Railway | `https://seo-app-production-xxx.up.railway.app` | Sí (OAuth + billing returnUrl) |
+| `DATABASE_URL` | Railway → Postgres → Variables | `postgresql://postgres:xxx@xxx.proxy.rlwy.net:xxxx/railway` | Sí |
+| `BILLING_TEST` | Manual | `false` en prod, `true` en dev | Sí (sin `false` no se cobra) |
+| `NODE_ENV` | Manual | `production` | Sí |
+| `PORT` | Railway auto-inject | `3000` (default) | Solo si custom |
+
+### Convención del archivo
+
+- Valores que el usuario DEBE rellenar → quedan vacíos (`SHOPIFY_API_KEY=`).
+- Valores con default razonable → se ponen (`SCOPES=read_products,...`, `BILLING_TEST=false`).
+- Comentarios `#` antes de bloques explican el origen.
+- **JAMÁS** valores reales (secretos): solo placeholders.
+
+### Verificación
+
+```bash
+cat .env.example
+# debe mostrar todas las variables listadas arriba, sin valores reales
+```
+
+---
+
+## Task 4.3 — Validar `Dockerfile` respeta el `PORT` de Railway
+
+### ¿Qué problema podría haber?
+
+Railway asigna el puerto a través de la env var `$PORT`. Si la app escucha en puerto fijo (3000) y Railway intenta proxiar al puerto que asignó (típicamente uno random alto), el health-check falla y el deploy se marca como crashed.
+
+`react-router-serve` (de `@react-router/serve`) lee `PORT` por default si está definido. Lo verificamos antes de tocar nada.
+
+### Verificación
+
+Inspeccionar el CLI de `react-router-serve` para confirmar que respeta `process.env.PORT`. Si lo hace, el Dockerfile actual está bien. Si no, ajustar `CMD` para pasarlo explícito.
+
+---
+
+## Task 4.4 — Smoke test local
+
+### ¿Por qué hacerlo antes del deploy?
+
+Si `npm run build` o `npm run lint` rompen localmente, en Railway también van a romper. Vale más detectarlo aquí en 30 segundos que esperar 5 minutos al build remoto.
+
+### Comandos
+
+```bash
+npm run build   # debe terminar sin errors
+npm run lint    # debe terminar 0 errors
+```
+
+Si algo falla → paramos y arreglamos antes de pasar al §5.
+
+---
+
+*Bitácora viva. Se actualiza al ejecutar cada task.*
