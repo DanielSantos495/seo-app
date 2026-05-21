@@ -328,4 +328,64 @@ pnpm run lint        # ✓ exit clean
 
 ---
 
+---
+
+## §5.4 — Generar la migración Postgres inicial contra Railway
+
+### Punto de partida
+
+- Postgres en Railway está **vacío** (sin tablas).
+- En el repo NO hay carpeta `prisma/migrations/` (la borramos en §4.1).
+- El Dockerfile corre `prisma migrate deploy` al iniciar, pero sin migraciones en el repo, no hay nada que aplicar → la DB queda vacía → la app crashea cuando intenta leer/escribir.
+
+### Estrategia
+
+Generar UNA migración inicial consolidada con `prisma migrate dev --name init` apuntando al Postgres Railway. Esto:
+
+1. Crea el archivo `prisma/migrations/<timestamp>_init/migration.sql` con todo el schema en sintaxis Postgres.
+2. Aplica esa migración a la DB Railway inmediatamente (la DB queda lista).
+3. Después commiteamos esa carpeta. En cualquier rebuild Railway encontrará la migración en el repo y `migrate deploy` la skipea (ya aplicada en la tabla `_prisma_migrations`).
+
+### Por qué `migrate dev` y no `migrate deploy`
+
+- `migrate deploy` solo aplica migraciones existentes; no genera. Como no tenemos ninguna, no haría nada.
+- `migrate dev` genera + aplica + marca como aplicada. Es el comando correcto para crear la migración inicial.
+- Se hace UNA SOLA VEZ contra Railway. Para cambios de schema futuros volvemos al flujo normal: `migrate dev` local → commit → `migrate deploy` automático en Railway.
+
+### Pasos
+
+1. **Usuario** copia `DATABASE_URL` del servicio Postgres en Railway → Variables → vista pública (NO la referencia `${{Postgres.DATABASE_URL}}`, sino la URL plana tipo `postgresql://postgres:xxx@xxx.proxy.rlwy.net:xxxx/railway`).
+2. **Usuario** pega esa URL en `seo-app/.env` (que está en `.gitignore`):
+   ```
+   DATABASE_URL="postgresql://postgres:xxx@xxx.proxy.rlwy.net:xxxx/railway"
+   ```
+3. **Claude** corre `pnpm prisma migrate dev --name init` → genera la carpeta de migración y aplica el schema.
+4. **Verificación**: la DB Railway debe tener las tablas `Session`, `SeoCache`, `SeoJob`, `_prisma_migrations`.
+5. **Commit + push** del directorio `prisma/migrations/`.
+6. Railway redeploya. `migrate deploy` ve la migración ya aplicada, skipea, y la app arranca limpia.
+
+### Seguridad
+
+- `.env` está en `.gitignore` (verificado en §3). La URL nunca se commitea.
+- Tras §5.4 puedes eliminar el `DATABASE_URL` del `.env` local — solo lo necesitamos para esta corrida única.
+
+### Resultado de la ejecución (2026-05-21)
+
+```
+Datasource "db": PostgreSQL database "railway" at "kodama.proxy.rlwy.net:11690"
+Applying migration `20260521214901_init`
+The following migration(s) have been created and applied from new schema changes:
+prisma/migrations/
+  └─ 20260521214901_init/
+    └─ migration.sql
+Your database is now in sync with your schema.
+✔ Generated Prisma Client (v6.19.3) in 74ms
+```
+
+Tablas creadas en Railway Postgres: `Session`, `SeoCache`, `SeoJob`, `_prisma_migrations` (esta última auto-gestionada por Prisma).
+
+Indices: `Session_shop_idx`, `SeoCache_shop_key` (UNIQUE), `SeoJob_shop_status_idx`, `SeoJob_shop_type_status_idx`.
+
+---
+
 *Bitácora viva. Se actualiza al ejecutar cada task.*
