@@ -158,7 +158,15 @@ Railway asigna el puerto a través de la env var `$PORT`. Si la app escucha en p
 
 ### Verificación
 
-Inspeccionar el CLI de `react-router-serve` para confirmar que respeta `process.env.PORT`. Si lo hace, el Dockerfile actual está bien. Si no, ajustar `CMD` para pasarlo explícito.
+Inspección directa de `node_modules/@react-router/serve/dist/cli.js` línea 78:
+
+```js
+let port = parseNumber(process.env.PORT) ?? await import_get_port.default({ port: 3e3 });
+```
+
+→ `react-router-serve` lee `process.env.PORT` directamente. Si Railway inyecta `PORT=8765`, la app escucha ahí; si no, intenta 3000.
+
+**Resultado: NO se requiere cambio en `Dockerfile`.** El `EXPOSE 3000` actual es solo metadata informativa de Docker (no fuerza el puerto en runtime).
 
 ---
 
@@ -176,6 +184,34 @@ npm run lint    # debe terminar 0 errors
 ```
 
 Si algo falla → paramos y arreglamos antes de pasar al §5.
+
+### Resultado de la ejecución (2026-05-21)
+
+- `npm run build` → ✅ client 1.18s + server SSR 183ms. Warning preexistente del dynamic import de `alt-text-generator.js` (documentado en `i18n-validation.md` §2).
+- `npm run lint` → ✅ exit 0, sin errors ni warnings nuevos.
+
+---
+
+## Cierre del §4
+
+Estado al terminar las 4 tasks:
+
+| Task | Resultado | Commit |
+|---|---|---|
+| 4.1 — Prisma → postgresql | ✅ Schema cambiado, migraciones SQLite en backup local | `4513e3a` |
+| 4.2 — Expandir `.env.example` | ✅ 8 vars documentadas con origen y default | `db6b70a` |
+| 4.3 — Dockerfile PORT | ✅ Verificado, sin cambios necesarios | (sin commit, solo doc) |
+| 4.4 — Smoke test build + lint | ✅ Build OK, lint OK | (sin commit, solo doc) |
+
+**Lo que queda pendiente para que el deploy funcione realmente** (cubierto por §5–§8 del runbook):
+
+1. Provisionar Railway (`seo-app` service + Postgres) — depende del usuario.
+2. Setear las env vars del `.env.example` en Railway con valores reales.
+3. Correr `npx prisma migrate dev --name init` contra el Postgres de Railway → genera la migración inicial Postgres consolidada.
+4. Actualizar `shopify.app.toml` con la URL de Railway + `npx shopify app deploy`.
+5. Activar Public Distribution en Partner Dashboard.
+6. Mergear `feature/deploy-prep` → `main` y push.
+7. QA end-to-end en dev store fresca.
 
 ---
 
