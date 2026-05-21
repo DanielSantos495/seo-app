@@ -91,3 +91,26 @@ Pendiente probar el flujo end-to-end en una dev store con catálogo grande (1000
 - SQLite locks: con bulk fix + revalidación de análisis + sesiones nuevas concurrentes, ver si aparecen `database is locked`. Si pasa → toca Postgres antes de prod.
 
 Para crear data de prueba existe `scripts/clear-alt-texts.js` para vaciar alts y probar bulk fix. Falta un script equivalente para crear N productos sintéticos (o usar el Bulk Operations API de Shopify).
+
+---
+
+## Upgrade Prisma 6.19 → 7.x
+
+**Hoy**: `prisma` y `@prisma/client` v6.19.3 (los logs de Railway muestran el aviso de major version disponible).
+
+**Por qué pospuesto**: major version con breaking changes (nueva API de generated client, posibles cambios en `prisma migrate`, en types de relaciones, etc.). En medio del deploy a producción no se mete un upgrade así.
+
+**Cuando hacerlo**:
+- Después del primer release estable (al menos 2 semanas en App Store sin issues).
+- En una rama dedicada `chore/prisma-7-upgrade`.
+
+**Pasos**:
+1. Leer https://pris.ly/d/major-version-upgrade.
+2. `pnpm add -D prisma@latest && pnpm add @prisma/client@latest`.
+3. Regenerar cliente: `pnpm prisma generate`.
+4. Validar build + lint + smoke test del CRUD en `app/services/*` (Session, SeoCache, SeoJob).
+5. Si hay breaking changes en generated client → fix en `app/services/`.
+6. Probar bulk fix end-to-end en dev store (toca cache, sessions, jobs).
+7. Merge a main, deploy en Railway, monitorear `_prisma_migrations` y query latency primeras 24h.
+
+**Riesgo**: bajo (esquema es simple, no usamos features avanzadas como `extendedWhereUnique`, `metrics`, `tracing`, `omit`). Aún así, no vale gastar el tiempo del deploy en esto.
