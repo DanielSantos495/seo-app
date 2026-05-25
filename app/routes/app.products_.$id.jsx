@@ -3,7 +3,6 @@ import {
   Form,
   useActionData,
   useLoaderData,
-  useLocation,
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -17,12 +16,11 @@ import { analyzeProduct } from "../services/seo-analyzer";
 import { generateAltTexts } from "../services/alt-text-generator";
 import { productAdminUrl } from "../services/admin-links";
 import { resizeCdnUrl } from "../services/image-url";
-import { checkIsPro } from "../services/billing";
 import { updateCachedItems } from "../services/seo-cache";
 import IssuesList from "../components/IssuesList";
 
 export const loader = async ({ request, params }) => {
-  const { admin, session, billing } = await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
 
   const gid = `gid://shopify/Product/${params.id}`;
   const product = await fetchProductById(admin, gid);
@@ -31,7 +29,6 @@ export const loader = async ({ request, params }) => {
   }
 
   const analysis = analyzeProduct(product);
-  const isPro = await checkIsPro(billing, session.shop);
 
   // Pre-calculamos los alt texts propuestos para mostrar el preview en el modal
   // sin necesidad de re-calcular en el cliente.
@@ -43,19 +40,11 @@ export const loader = async ({ request, params }) => {
     },
   );
 
-  return { product, analysis, isPro, proposedAlts };
+  return { product, analysis, proposedAlts };
 };
 
 export const action = async ({ request, params }) => {
-  const { admin, session, billing } = await authenticate.admin(request);
-
-  const isPro = await checkIsPro(billing, session.shop);
-  if (!isPro) {
-    return new Response(
-      JSON.stringify({ error: "This action is only available on the Pro plan" }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
-  }
+  const { admin, session } = await authenticate.admin(request);
 
   const gid = `gid://shopify/Product/${params.id}`;
   const product = await fetchProductById(admin, gid);
@@ -102,16 +91,14 @@ const SCORE_TONE = (score) => {
 };
 
 export default function ProductDetail() {
-  const { product, analysis, isPro, proposedAlts } = useLoaderData();
+  const { product, analysis, proposedAlts } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
-  const location = useLocation();
   const shopify = useAppBridge();
 
   const editUrl = productAdminUrl(product.id);
   const featured = product.images?.[0];
   const missingAltCount = product.images.filter((i) => !i.altText).length;
-  const upgradeUrl = `/app/upgrade${location.search}`;
   const isApplying = navigation.state === "submitting";
 
   // Toast cuando la acción termina. Usamos ref para asegurar que cada
@@ -175,11 +162,9 @@ export default function ProductDetail() {
             <s-button
               variant="primary"
               command="--show"
-              commandFor={isPro ? "alt-fix-modal" : "upgrade-modal"}
+              commandFor="alt-fix-modal"
             >
-              {isPro
-                ? `Generate missing alt texts (${missingAltCount})`
-                : `Pro: fix ${missingAltCount} alt text${missingAltCount === 1 ? "" : "s"}`}
+              Generate missing alt texts ({missingAltCount})
             </s-button>
           )}
           {missingAltCount === 0 && (
@@ -190,7 +175,7 @@ export default function ProductDetail() {
         </s-stack>
       </s-section>
 
-      {isPro && proposedAlts.length > 0 && (
+      {proposedAlts.length > 0 && (
         <s-modal
           id="alt-fix-modal"
           heading={`Preview: ${proposedAlts.length} alt text${proposedAlts.length === 1 ? "" : "s"}`}
@@ -235,34 +220,6 @@ export default function ProductDetail() {
             commandFor="alt-fix-modal"
           >
             Cancel
-          </s-button>
-        </s-modal>
-      )}
-
-      {!isPro && missingAltCount > 0 && (
-        <s-modal
-          id="upgrade-modal"
-          heading="Upgrade to Pro to fix alt texts"
-        >
-          <s-paragraph>
-            Bulk alt text fixes are a Pro plan feature. Turn it on and
-            we&apos;ll generate descriptive alt text for all your images in
-            one click.
-          </s-paragraph>
-          <s-button
-            slot="primaryAction"
-            variant="primary"
-            href={upgradeUrl}
-            target="_top"
-          >
-            Upgrade to Pro · $9/month (7-day free trial)
-          </s-button>
-          <s-button
-            slot="secondaryActions"
-            command="--hide"
-            commandFor="upgrade-modal"
-          >
-            Close
           </s-button>
         </s-modal>
       )}

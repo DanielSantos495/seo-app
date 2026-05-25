@@ -1,7 +1,6 @@
 import { authenticate } from "../shopify.server";
 import { previewAltTextsForProducts } from "../services/shopify-api";
 import { getCachedItems } from "../services/seo-cache";
-import { checkIsPro } from "../services/billing";
 
 // Resource route: devuelve 3 muestras de alt text generados para el modal
 // de bulk fix. Se llama on-demand desde el cliente cuando el merchant abre
@@ -13,22 +12,17 @@ import { checkIsPro } from "../services/billing";
 //
 // Llamado vía `useFetcher().load("/api/bulk-preview")` desde el cliente.
 export const loader = async ({ request }) => {
-  const { admin, session, billing } = await authenticate.admin(request);
-
-  const isPro = await checkIsPro(billing, session.shop);
-  const currentPlan = isPro ? "pro" : "free";
+  const { admin, session } = await authenticate.admin(request);
 
   // Leemos los GIDs elegibles del cache (no re-analizamos).
-  const cached = await getCachedItems(session.shop, currentPlan);
+  const cached = await getCachedItems(session.shop);
   if (!cached) {
     return { samples: [] };
   }
 
   const eligibleGids = cached.items
-    .filter(
-      (i) =>
-        !i.locked &&
-        i.issues?.some((iss) => iss.field === "images.altText"),
+    .filter((i) =>
+      i.issues?.some((iss) => iss.field === "images.altText"),
     )
     .map((i) => i.productId)
     .slice(0, 50);

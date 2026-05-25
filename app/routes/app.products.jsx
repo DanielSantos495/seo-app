@@ -8,15 +8,12 @@ import {
 import {
   useFetcher,
   useLoaderData,
-  useLocation,
   useRevalidator,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
 import { getCachedItems } from "../services/seo-cache";
-import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
 import { resizeCdnUrl } from "../services/image-url";
 import { findActiveJob, serializeJob } from "../services/seo-job";
@@ -28,18 +25,15 @@ import { JobProgress, useJobPolling } from "../components/JobProgress";
 import BulkFixSummaryBanner from "../components/BulkFixSummaryBanner";
 
 export const loader = async ({ request }) => {
-  const { admin, session, billing } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
-  const isPro = await checkIsPro(billing, session.shop);
-  const currentPlan = isPro ? "pro" : "free";
-
-  const cached = await getCachedItems(session.shop, currentPlan);
+  const cached = await getCachedItems(session.shop);
 
   let activeAnalysisJob = null;
   if (!cached) {
-    activeAnalysisJob = await startAnalysisJob(session.shop, admin, { isPro });
+    activeAnalysisJob = await startAnalysisJob(session.shop, admin);
   } else if (cached.isStale) {
-    startAnalysisJob(session.shop, admin, { isPro }).catch(() => {});
+    startAnalysisJob(session.shop, admin).catch(() => {});
     activeAnalysisJob = await findActiveJob(session.shop, "analysis");
   }
 
@@ -51,9 +45,7 @@ export const loader = async ({ request }) => {
       analysisJob: serializeJob(activeAnalysisJob),
       bulkJob: serializeJob(activeBulkJob),
       items: [],
-      planLimit: FREE_PLAN_PRODUCT_LIMIT,
       analyzedAt: null,
-      isPro,
       isStale: false,
       bulkFix: { eligible: 0, processable: 0 },
     };
@@ -67,9 +59,7 @@ export const loader = async ({ request }) => {
     analysisJob: serializeJob(activeAnalysisJob),
     bulkJob: serializeJob(activeBulkJob),
     items: cached.items,
-    planLimit: FREE_PLAN_PRODUCT_LIMIT,
     analyzedAt: cached.analyzedAt.toISOString(),
-    isPro,
     isStale: cached.isStale,
     bulkFix: {
       // Sin cap: el job procesa todos los elegibles.
@@ -82,18 +72,10 @@ export const loader = async ({ request }) => {
 // El action dispara un job de bulk fix y devuelve inmediatamente el jobId.
 // El cliente polléa /api/job-status para ver progreso. Sin bloqueo del POST.
 export const action = async ({ request }) => {
-  const { admin, session, billing } = await authenticate.admin(request);
-
-  const isPro = await checkIsPro(billing, session.shop);
-  if (!isPro) {
-    return new Response(
-      JSON.stringify({ error: "This action is only available on the Pro plan" }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
-  }
+  const { admin, session } = await authenticate.admin(request);
 
   // Tomamos los elegibles directamente del cache pre-computado.
-  const cached = await getCachedItems(session.shop, "pro");
+  const cached = await getCachedItems(session.shop);
   if (!cached) {
     return { ok: false, error: "Cache unavailable. Reload the page." };
   }
@@ -119,8 +101,6 @@ export default function Products() {
     analysisJob: initialAnalysisJob,
     bulkJob: initialBulkJob,
     items,
-    planLimit,
-    isPro,
     isStale,
     bulkFix,
   } = useLoaderData();
@@ -134,10 +114,6 @@ export default function Products() {
   const bulkFetcher = useFetcher();
   const bulkActionData = bulkFetcher.data;
   const submittedJobId = bulkActionData?.jobId;
-  // Upgrade va por GET con full-page reload (`target="_top"`) para evitar el bug
-  // de single-fetch + billing.request. Conservamos los query params de Shopify.
-  const location = useLocation();
-  const upgradeUrl = `/app/upgrade${location.search}`;
   const revalidator = useRevalidator();
 
   // Job de análisis (stale-while-revalidate o primer fetch).
@@ -218,11 +194,7 @@ export default function Products() {
       : items;
 
     const sorted = [...filtered];
-    // Locked siempre al final cuando ordenamos por score.
     const byScore = (dir) => (a, b) => {
-      if (a.locked && !b.locked) return 1;
-      if (!a.locked && b.locked) return -1;
-      if (a.locked && b.locked) return 0;
       const aScore = a.score ?? -1;
       const bScore = b.score ?? -1;
       return dir === "asc" ? aScore - bScore : bScore - aScore;
@@ -246,8 +218,6 @@ export default function Products() {
     }
     return sorted;
   }, [items, deferredQuery, sortKey]);
-
-  const lockedCount = items.filter((i) => i.locked).length;
 
   // Paginación cliente: renderizar 2k+ filas a la vez congela el navegador.
   // 50 por página + controles son suficientes y no requieren librerías.
@@ -296,16 +266,6 @@ export default function Products() {
         </s-banner>
       )}
 
-      {!isPro && lockedCount > 0 && (
-        <s-banner tone="info" heading="You're on the Free plan">
-          <s-paragraph>
-            We analyzed the first {planLimit} products. You have {lockedCount}{" "}
-            more product{lockedCount === 1 ? "" : "s"} waiting. Upgrade to Pro
-            to unlock them all.
-          </s-paragraph>
-        </s-banner>
-      )}
-
       <s-section>
         <s-stack direction="block" gap="base">
           <s-stack direction="inline" gap="base">
@@ -351,17 +311,14 @@ export default function Products() {
               <s-button
                 variant="primary"
                 command="--show"
-                commandFor={isPro ? "bulk-alt-modal" : "upgrade-modal"}
+                commandFor="bulk-alt-modal"
                 onClick={() => {
-                  // Solo cargamos preview si es Pro y aún no lo cargamos.
-                  if (isPro && !samples && previewFetcher.state === "idle") {
+                  if (!samples && previewFetcher.state === "idle") {
                     previewFetcher.load("/api/bulk-preview");
                   }
                 }}
               >
-                {isPro
-                  ? `Fix alt texts (${bulkFix.processable})`
-                  : `Pro: fix alt texts (${bulkFix.eligible})`}
+                Fix alt texts ({bulkFix.processable})
               </s-button>
             )}
           </s-stack>
@@ -403,28 +360,18 @@ export default function Products() {
                         </s-stack>
                       </s-table-cell>
                       <s-table-cell>
-                        <ScoreBadge score={item.score} locked={item.locked} />
+                        <ScoreBadge score={item.score} />
                       </s-table-cell>
                       <s-table-cell>
-                        <IssuesSummary issues={item.issues} locked={item.locked} />
+                        <IssuesSummary issues={item.issues} />
                       </s-table-cell>
                       <s-table-cell>
-                        {item.locked ? (
-                          <s-button
-                            variant="tertiary"
-                            command="--show"
-                            commandFor="upgrade-modal"
-                          >
-                            Unlock
-                          </s-button>
-                        ) : (
-                          <s-button
-                            variant="tertiary"
-                            href={`/app/products/${gidToNumericId(item.productId)}`}
-                          >
-                            View details
-                          </s-button>
-                        )}
+                        <s-button
+                          variant="tertiary"
+                          href={`/app/products/${gidToNumericId(item.productId)}`}
+                        >
+                          View details
+                        </s-button>
                       </s-table-cell>
                     </s-table-row>
                   ))}
@@ -458,7 +405,7 @@ export default function Products() {
         </s-stack>
       </s-section>
 
-      {isPro && bulkFix.eligible > 0 && (
+      {bulkFix.eligible > 0 && (
         <s-modal
           id="bulk-alt-modal"
           heading="Fix alt texts in bulk"
@@ -511,46 +458,19 @@ export default function Products() {
         </s-modal>
       )}
 
-      <s-modal
-        id="upgrade-modal"
-        heading="Upgrade to Pro to unlock more products"
-      >
-        <s-paragraph>
-          The Free plan analyzes the first {planLimit} products in your store.
-          With the Pro plan, we analyze all of them with no limit and you
-          unlock bulk alt text fixes.
-        </s-paragraph>
-        <s-button
-          slot="primaryAction"
-          variant="primary"
-          href={upgradeUrl}
-          target="_top"
-        >
-          Upgrade to Pro · $9/month (7-day free trial)
-        </s-button>
-        <s-button
-          slot="secondaryActions"
-          command="--hide"
-          commandFor="upgrade-modal"
-        >
-          Close
-        </s-button>
-      </s-modal>
     </s-page>
   );
 }
 
 /* eslint-disable react/prop-types */
-function ScoreBadge({ score, locked }) {
-  if (locked) return <s-badge tone="neutral">Locked</s-badge>;
+function ScoreBadge({ score }) {
   let tone = "critical";
   if (score >= 80) tone = "success";
   else if (score >= 50) tone = "caution";
   return <s-badge tone={tone}>{score}</s-badge>;
 }
 
-function IssuesSummary({ issues, locked }) {
-  if (locked) return <s-text tone="subdued">—</s-text>;
+function IssuesSummary({ issues }) {
   if (issues.length === 0) return <s-text tone="subdued">No issues</s-text>;
   const counts = { high: 0, medium: 0, low: 0 };
   for (const i of issues) counts[i.impact]++;

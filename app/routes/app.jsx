@@ -8,26 +8,19 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
-import { checkIsPro } from "../services/billing";
-import { FREE_PLAN_PRODUCT_LIMIT } from "../services/seo-analyzer";
 import { NavLink } from "../components/NavLink";
 import { RouteSkeleton } from "../components/RouteSkeleton";
 
-// El layout autentica una sola vez y resuelve `isPro` (memoizado en
-// plan-cache). Los hijos consumen estos valores con `useRouteLoaderData
-// ("routes/app")` y NO vuelven a llamar a `checkIsPro` ni a `authenticate`.
-// Resultado: cada cambio de tab evita 1-2 round-trips a Shopify.
+// El layout autentica una sola vez y expone los datos básicos de la sesión.
+// V1 free: no hay distinción de plan ni límites.
 export const loader = async ({ request }) => {
-  const { session, billing } = await authenticate.admin(request);
-  const isPro = await checkIsPro(billing, session.shop);
+  const { session } = await authenticate.admin(request);
 
   return {
     // eslint-disable-next-line no-undef
     apiKey: process.env.SHOPIFY_API_KEY || "",
     shop: session.shop,
     shopHandle: session.shop.replace(/\.myshopify\.com$/, ""),
-    isPro,
-    planLimit: FREE_PLAN_PRODUCT_LIMIT,
   };
 };
 

@@ -25,7 +25,6 @@ export function buildCsv(items) {
   const rows = [HEADERS.map(escapeCell).join(",")];
 
   for (const item of items) {
-    if (item.locked) continue;
     const counts = { high: 0, medium: 0, low: 0 };
     for (const i of item.issues || []) counts[i.impact]++;
     const fields = (item.issues || []).map((i) => i.field).join(" | ");

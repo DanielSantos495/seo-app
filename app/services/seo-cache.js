@@ -1,13 +1,15 @@
 import prisma from "../db.server";
-import {
-  aggregateAnalyses,
-  analyzeProduct,
-  FREE_PLAN_PRODUCT_LIMIT,
-} from "./seo-analyzer";
+import { aggregateAnalyses, analyzeProduct } from "./seo-analyzer";
 
 // Edad a partir de la cual consideramos el cache "stale" (servimos igual,
 // pero el loader dispara revalidación en background).
 export const CACHE_STALE_AFTER_MS = 60 * 60 * 1000; // 1 hora
+
+// Versión de schema del JSON serializado en `SeoCache.data`. Cuando cambia
+// la forma de `items` o de los derivados, bumpear acá invalida caches viejos
+// sin tener que correr una migración. Pasamos de cache plan-aware (v1) a
+// cache único free (v2).
+const CACHE_SCHEMA = "v2-free";
 
 const TOP_WORST = 5;
 
@@ -16,11 +18,9 @@ const TOP_WORST = 5;
 // sobre el catálogo completo (10k items → 50-200 ms síncronos por request).
 // Ahora los guardamos pre-procesados.
 function computeDerivatives(items) {
-  const unlocked = items.filter((i) => !i.locked);
-
   // Summary: overallScore + totalProducts + issuesByImpact.
   const summary = (() => {
-    const agg = aggregateAnalyses(unlocked);
+    const agg = aggregateAnalyses(items);
     return {
       overallScore: agg.overallScore,
       totalProducts: agg.totalProducts,
@@ -29,7 +29,7 @@ function computeDerivatives(items) {
   })();
 
   // Top N peores productos (score < 100), shape liviano para el dashboard.
-  const worstProducts = [...unlocked]
+  const worstProducts = [...items]
     .filter((p) => (p.score ?? 100) < 100)
     .sort((a, b) => (a.score ?? 0) - (b.score ?? 0))
     .slice(0, TOP_WORST)
@@ -41,7 +41,7 @@ function computeDerivatives(items) {
     }));
 
   // GIDs con alt text faltante — para el botón de bulk fix.
-  const eligibleAltGids = unlocked
+  const eligibleAltGids = items
     .filter((i) =>
       i.issues?.some((iss) => iss.field === "images.altText"),
     )
@@ -50,10 +50,12 @@ function computeDerivatives(items) {
   return { summary, worstProducts, eligibleAltGids };
 }
 
-// Lee la fila cruda. Si no hay derivados (cache viejo), los computa al vuelo
-// para mantener retro-compatibilidad. Si están, los devuelve directo.
+// Lee la fila cruda. Si el schema no coincide (cache viejo plan-aware),
+// devuelve null para forzar re-análisis. Si coincide pero faltan derivados,
+// los computa al vuelo.
 function parseCacheRow(row) {
   const parsed = JSON.parse(row.data);
+  if (parsed.schema !== CACHE_SCHEMA) return null;
   if (!parsed.summary || !parsed.worstProducts || !parsed.eligibleAltGids) {
     const derived = computeDerivatives(parsed.items || []);
     return { ...parsed, ...derived };
@@ -61,14 +63,14 @@ function parseCacheRow(row) {
   return parsed;
 }
 
-// Devuelve siempre los items cacheados si existen y corresponden al plan
-// actual, junto con `isStale` y derivados pre-computados.
-export async function getCachedItems(shop, currentPlan) {
+// Devuelve siempre los items cacheados si existen y son del schema actual,
+// junto con `isStale` y derivados pre-computados.
+export async function getCachedItems(shop) {
   const row = await prisma.seoCache.findUnique({ where: { shop } });
   if (!row) return null;
 
   const parsed = parseCacheRow(row);
-  if (parsed.plan !== currentPlan) return null;
+  if (!parsed) return null;
 
   const age = Date.now() - row.updatedAt.getTime();
   return {
@@ -81,9 +83,9 @@ export async function getCachedItems(shop, currentPlan) {
   };
 }
 
-export async function setCachedItems(shop, items, plan) {
+export async function setCachedItems(shop, items) {
   const derived = computeDerivatives(items);
-  const data = JSON.stringify({ plan, items, ...derived });
+  const data = JSON.stringify({ schema: CACHE_SCHEMA, items, ...derived });
   await prisma.seoCache.upsert({
     where: { shop },
     update: { data },
@@ -128,31 +130,18 @@ export async function updateCachedItems(shop, productIds, mutator) {
 }
 
 // Convierte productos crudos (de fetchAllProducts) en items canónicos
-// del cache. Aplica un límite: los primeros N reciben análisis completo;
-// los demás quedan como `locked: true`. Pasar `limit: null` (o Infinity) para
-// analizar todos — caso plan Pro.
-export function buildItemsFromProducts(
-  products,
-  { limit = FREE_PLAN_PRODUCT_LIMIT } = {},
-) {
-  const effectiveLimit = limit ?? Infinity;
-  return products.map((product, index) => {
-    const base = {
+// del cache. V1 free: todos los productos se analizan, sin tope.
+export function buildItemsFromProducts(products) {
+  return products.map((product) => {
+    const analysis = analyzeProduct(product);
+    return {
       productId: product.id,
       title: product.title,
       handle: product.handle,
       thumbnailUrl: product.images?.[0]?.url || null,
       thumbnailAlt: product.images?.[0]?.altText || product.title,
+      score: analysis.score,
+      issues: analysis.issues,
     };
-    if (index < effectiveLimit) {
-      const analysis = analyzeProduct(product);
-      return {
-        ...base,
-        score: analysis.score,
-        issues: analysis.issues,
-        locked: false,
-      };
-    }
-    return { ...base, score: null, issues: [], locked: true };
   });
 }

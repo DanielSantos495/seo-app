@@ -14,7 +14,7 @@ import {
   setCachedItems,
   updateCachedItems,
 } from "./seo-cache";
-import { analyzeProduct, FREE_PLAN_PRODUCT_LIMIT } from "./seo-analyzer";
+import { analyzeProduct } from "./seo-analyzer";
 import {
   bumpProgress,
   createJob,
@@ -25,17 +25,15 @@ import {
 } from "./seo-job";
 
 // Dispara un job de análisis full del catálogo. Si ya existe uno activo,
-// devuelve ese mismo (idempotente).
-export async function startAnalysisJob(shop, admin, { isPro }) {
+// devuelve ese mismo (idempotente). V1 free: sin tope de productos.
+export async function startAnalysisJob(shop, admin) {
   const existing = await findActiveJob(shop, "analysis");
   if (existing) return existing;
 
-  const job = await createJob(shop, "analysis", {
-    payload: { plan: isPro ? "pro" : "free" },
-  });
+  const job = await createJob(shop, "analysis");
 
   // Fire-and-forget: el caller no espera al resultado.
-  runAnalysisJob(job.id, shop, admin, { isPro }).catch(async (err) => {
+  runAnalysisJob(job.id, shop, admin).catch(async (err) => {
     console.error("[seo-job] analysis failed", err);
     await failJob(job.id, err.message);
   });
@@ -43,22 +41,20 @@ export async function startAnalysisJob(shop, admin, { isPro }) {
   return job;
 }
 
-async function runAnalysisJob(jobId, shop, admin, { isPro }) {
+async function runAnalysisJob(jobId, shop, admin) {
   await startJob(jobId);
 
-  // Heartbeat cada N items para evitar zombies durante fetches largos. Por
-  // cada página de productos (50 por default) hacemos un bump.
+  // Heartbeat por página (50 productos por default) para evitar zombies
+  // durante fetches largos en catálogos grandes.
   const products = await fetchAllProducts(admin, {
-    limit: isPro ? null : FREE_PLAN_PRODUCT_LIMIT,
+    limit: null,
     onPage: async ({ processed }) => {
       await bumpProgress(jobId, { processed });
     },
   });
 
-  const items = buildItemsFromProducts(products, {
-    limit: isPro ? null : FREE_PLAN_PRODUCT_LIMIT,
-  });
-  await setCachedItems(shop, items, isPro ? "pro" : "free");
+  const items = buildItemsFromProducts(products);
+  await setCachedItems(shop, items);
 
   await finishJob(jobId, {
     resultSummary: { totalProducts: items.length },

@@ -2,14 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import {
   useFetcher,
   useLoaderData,
-  useLocation,
   useRevalidator,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getCachedItems } from "../services/seo-cache";
-import { checkIsPro } from "../services/billing";
 import { gidToNumericId } from "../services/admin-links";
 import { resizeCdnUrl } from "../services/image-url";
 import { findActiveJob, serializeJob } from "../services/seo-job";
@@ -30,7 +28,6 @@ const IMPACT_ORDER = { high: 0, medium: 1, low: 2 };
 function groupIssuesByField(items) {
   const groups = new Map();
   for (const item of items) {
-    if (item.locked) continue;
     for (const issue of item.issues || []) {
       let g = groups.get(issue.field);
       if (!g) {
@@ -76,18 +73,15 @@ function groupIssuesByField(items) {
 }
 
 export const loader = async ({ request }) => {
-  const { admin, session, billing } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
-  const isPro = await checkIsPro(billing, session.shop);
-  const currentPlan = isPro ? "pro" : "free";
-
-  const cached = await getCachedItems(session.shop, currentPlan);
+  const cached = await getCachedItems(session.shop);
 
   let activeAnalysisJob = null;
   if (!cached) {
-    activeAnalysisJob = await startAnalysisJob(session.shop, admin, { isPro });
+    activeAnalysisJob = await startAnalysisJob(session.shop, admin);
   } else if (cached.isStale) {
-    startAnalysisJob(session.shop, admin, { isPro }).catch(() => {});
+    startAnalysisJob(session.shop, admin).catch(() => {});
     activeAnalysisJob = await findActiveJob(session.shop, "analysis");
   }
 
@@ -100,7 +94,6 @@ export const loader = async ({ request }) => {
       bulkJob: serializeJob(activeBulkJob),
       groups: [],
       analyzedAt: null,
-      isPro,
       isStale: false,
       bulkFix: { eligible: 0, processable: 0 },
     };
@@ -117,7 +110,6 @@ export const loader = async ({ request }) => {
     bulkJob: serializeJob(activeBulkJob),
     groups,
     analyzedAt: cached.analyzedAt.toISOString(),
-    isPro,
     isStale: cached.isStale,
     bulkFix: {
       eligible: eligibleCount,
@@ -129,17 +121,9 @@ export const loader = async ({ request }) => {
 // El action dispara un job de bulk fix y vuelve al toque con el jobId. El
 // cliente hace polling al estado del job — el POST no bloquea.
 export const action = async ({ request }) => {
-  const { admin, session, billing } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
-  const isPro = await checkIsPro(billing, session.shop);
-  if (!isPro) {
-    return new Response(
-      JSON.stringify({ error: "This action is only available on the Pro plan" }),
-      { status: 403, headers: { "Content-Type": "application/json" } },
-    );
-  }
-
-  const cached = await getCachedItems(session.shop, "pro");
+  const cached = await getCachedItems(session.shop);
   if (!cached) {
     return { ok: false, error: "Cache unavailable. Reload the page." };
   }
@@ -158,13 +142,10 @@ export default function Issues() {
     analysisJob: initialAnalysisJob,
     bulkJob: initialBulkJob,
     groups,
-    isPro,
     isStale,
     bulkFix,
   } = useLoaderData();
   const shopify = useAppBridge();
-  const location = useLocation();
-  const upgradeUrl = `/app/upgrade${location.search}`;
   const revalidator = useRevalidator();
   const [expandedGroups, setExpandedGroups] = useState({});
   // Preview fetcher: samples del modal.
@@ -352,16 +333,14 @@ export default function Issues() {
                 <s-button
                   variant="primary"
                   command="--show"
-                  commandFor={isPro ? "bulk-alt-modal" : "upgrade-modal"}
+                  commandFor="bulk-alt-modal"
                   onClick={() => {
-                    if (isPro && !samples && previewFetcher.state === "idle") {
+                    if (!samples && previewFetcher.state === "idle") {
                       previewFetcher.load("/api/bulk-preview");
                     }
                   }}
                 >
-                  {isPro
-                    ? `Fix all (${bulkFix.processable})`
-                    : `Pro: fix all (${bulkFix.eligible})`}
+                  Fix all ({bulkFix.processable})
                 </s-button>
               )}
             </s-stack>
@@ -369,7 +348,7 @@ export default function Issues() {
         ))
       )}
 
-      {isPro && bulkFix.eligible > 0 && (
+      {bulkFix.eligible > 0 && (
         <s-modal id="bulk-alt-modal" heading="Fix alt texts in bulk">
           <s-box paddingBlockEnd="base">
             <s-stack direction="block" gap="base">
@@ -419,30 +398,6 @@ export default function Issues() {
         </s-modal>
       )}
 
-      {!isPro && bulkFix.eligible > 0 && (
-        <s-modal id="upgrade-modal" heading="Upgrade to Pro to use bulk fix">
-          <s-paragraph>
-            Bulk alt text fixes are a Pro plan feature. Turn it on and
-            we&apos;ll generate descriptive alt text for all images in one
-            click.
-          </s-paragraph>
-          <s-button
-            slot="primaryAction"
-            variant="primary"
-            href={upgradeUrl}
-            target="_top"
-          >
-            Upgrade to Pro · $9/month (7-day free trial)
-          </s-button>
-          <s-button
-            slot="secondaryActions"
-            command="--hide"
-            commandFor="upgrade-modal"
-          >
-            Close
-          </s-button>
-        </s-modal>
-      )}
     </s-page>
   );
 }

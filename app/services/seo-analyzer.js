@@ -1,8 +1,10 @@
 // Lógica pura de scoring SEO por producto.
 // Sin dependencias externas — fácil de testear.
-
-// Límite del plan free: solo los primeros N productos reciben análisis completo.
-export const FREE_PLAN_PRODUCT_LIMIT = 10;
+//
+// Checklist interno (no es el score real de Google ni una estimación de
+// ranking): suma 100 puntos si TODOS los campos auditados están bien.
+// Es una métrica de completitud técnica del catálogo, no una promesa de
+// posicionamiento.
 //
 // Reglas (max 100):
 //   - Meta title presente:        25 pts (-10 si longitud fuera de 50–60)
