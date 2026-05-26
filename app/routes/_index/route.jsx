@@ -18,9 +18,11 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
+        <h1 className={styles.heading}>Cury SEO</h1>
         <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
+          Audit the on-page SEO fields of every product in your Shopify
+          store, surface what needs attention, and fix missing image alt
+          texts in bulk.
         </p>
         {showForm && (
           <Form className={styles.form} method="post" action="/auth/login">
@@ -36,16 +38,19 @@ export default function App() {
         )}
         <ul className={styles.list}>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Catalog-wide audit</strong>. Detect missing or
+            out-of-range meta titles, meta descriptions, image alt texts,
+            product descriptions and URL handles across every product.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Bulk alt text fix</strong>. Generate and apply alt
+            text to images that don&apos;t have it across the whole
+            catalog in one click.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>CSV export</strong>. Download the full audit with
+            each product&apos;s completeness score, issues by severity,
+            and the fields that need attention.
           </li>
         </ul>
       </div>

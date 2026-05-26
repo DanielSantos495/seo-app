@@ -320,9 +320,9 @@ Cada producto recibe un score **0–100** (función pura en `app/services/seo-an
 ```
 scopes = "read_products,read_content,write_products"
 ```
-- `read_products` → core del análisis.
-- `read_content` → reservado para análisis ampliado (V2).
-- `write_products` → bulk fix de alt texts (`productUpdateMedia`).
+- `read_products` → core del análisis (activo en V1).
+- `write_products` → bulk fix de alt texts vía `productUpdateMedia` (activo en V1).
+- `read_content` → **declarado pero NO ejercitado en V1**. Se mantiene para evitar reinstalación forzosa de toda la base cuando V2 introduzca el análisis de páginas/colecciones (Priority 2 en `FUTURE_IDEAS.md`). Hay una nota explicativa al reviewer en `marketing/seo-app/listing-content.md` §12.2 para preempt la pregunta. Si el reviewer insiste igual, se remueve y se vuelve a pedir en V2 (asumiendo el costo de reinstalación entonces).
 
 ### 7.3 GraphQL (API 2026-04)
 
