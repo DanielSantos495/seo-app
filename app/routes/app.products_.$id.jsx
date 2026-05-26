@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react";
 import {
-  Form,
   useActionData,
   useLoaderData,
   useNavigation,
+  useSubmit,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -94,6 +94,7 @@ export default function ProductDetail() {
   const { product, analysis, proposedAlts } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
+  const submit = useSubmit();
   const shopify = useAppBridge();
 
   const editUrl = productAdminUrl(product.id);
@@ -111,7 +112,7 @@ export default function ProductDetail() {
     if (actionData.ok) {
       shopify.toast.show(
         actionData.count === 0
-          ? "No alt texts to add"
+          ? "No images on this product need alt text"
           : `Done: ${actionData.count} alt text${actionData.count === 1 ? "" : "s"} added`,
       );
     } else if (actionData.error) {
@@ -169,7 +170,7 @@ export default function ProductDetail() {
           )}
           {missingAltCount === 0 && (
             <s-text tone="subdued">
-              All images already have alt text.
+              All images on this product already have alt text.
             </s-text>
           )}
         </s-stack>
@@ -178,49 +179,38 @@ export default function ProductDetail() {
       {proposedAlts.length > 0 && (
         <s-modal
           id="alt-fix-modal"
-          heading={`Preview: ${proposedAlts.length} alt text${proposedAlts.length === 1 ? "" : "s"}`}
+          heading="Generate missing alt texts"
         >
-          <s-paragraph>
-            We&apos;ll add alt text to images that don&apos;t have it. Images
-            with existing alt text won&apos;t be changed.
-          </s-paragraph>
-          <s-stack direction="block" gap="small-300">
-            {proposedAlts.map((p) => (
-              <s-stack
-                key={p.imageId}
-                direction="inline"
-                gap="base"
-                alignment="center"
-              >
-                {p.thumbnailUrl && (
-                  <s-thumbnail
-                    src={resizeCdnUrl(p.thumbnailUrl, 80)}
-                    alt={p.altText}
-                    size="small"
-                    loading="lazy"
-                  />
-                )}
-                <s-text>{p.altText}</s-text>
+          <s-box paddingBlockEnd="base">
+            <s-stack direction="block" gap="base">
+              <s-paragraph>
+                We&apos;ll add alt text to <s-text>{proposedAlts.length}</s-text> image
+                {proposedAlts.length === 1 ? "" : "s"} on this product. Images
+                that already have alt text won&apos;t be changed.
+              </s-paragraph>
+              <s-stack direction="block" gap="small-300">
+                <s-text tone="subdued">Preview:</s-text>
+                {proposedAlts.map((p) => (
+                  <s-text key={p.imageId}>&ldquo;{p.altText}&rdquo;</s-text>
+                ))}
               </s-stack>
-            ))}
-          </s-stack>
-          <Form method="post" slot="primaryAction">
+            </s-stack>
+          </s-box>
+          <s-stack direction="inline" gap="base" justifyContent="end">
+            <s-button command="--hide" commandFor="alt-fix-modal">
+              Cancel
+            </s-button>
             <s-button
-              type="submit"
               variant="primary"
               {...(isApplying ? { loading: true } : {})}
+              onClick={() => {
+                if (!isApplying) submit({}, { method: "post" });
+              }}
             >
               Apply {proposedAlts.length} change
               {proposedAlts.length === 1 ? "" : "s"}
             </s-button>
-          </Form>
-          <s-button
-            slot="secondaryActions"
-            command="--hide"
-            commandFor="alt-fix-modal"
-          >
-            Cancel
-          </s-button>
+          </s-stack>
         </s-modal>
       )}
 
