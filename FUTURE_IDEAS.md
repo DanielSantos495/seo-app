@@ -62,6 +62,22 @@ La App tiene que leer en HTML y analizar el uso correcto de headings comparando 
 ---
 
 
+## Homogeneidad de URL: rename `/seo-analyzer/` → `/cury-seo/` (V2, post-review)
+
+Hoy las legales y la landing viven en `curyapps.com/seo-analyzer/...`. El slug del path quedó del nombre viejo de la app ("SEO Analyzer"). Para coherencia de marca con el rename a "Cury SEO", el path debería pasar a `curyapps.com/cury-seo/...`.
+
+**Por qué se difirió (2026-05-26):** durante la ventana submit-to-review se prioriza congelar la superficie de cambios. Las URLs ya están pegadas en el Partner Dashboard (§10 del listing); cambiarlas obliga a re-pegar antes del submit y reintroduce riesgo. Después del review pasa, se hace con `_redirects 301` para preservar links cacheados.
+
+**Pasos cuando se haga:**
+1. `git mv cury-apps-site/seo-analyzer cury-apps-site/cury-seo`.
+2. Reemplazar `/seo-analyzer/` → `/cury-seo/` en los HTML del sitio.
+3. Agregar `cury-apps-site/_redirects` con `/seo-analyzer/* /cury-seo/:splat 301`.
+4. Push a `main` → Cloudflare Pages redeploya.
+5. Update Privacy + ToS URLs en el Partner Dashboard del App Store.
+6. Update memory (`project_cury_apps_domain.md`) + `seo-app/CLAUDE.md` + `marketing/seo-app/listing-content.md` §10.
+
+---
+
 ## Sidekick App Extension (V3)
 
 Exponer acciones tipo "¿Cuál es mi producto con peor SEO?" desde el chat nativo de Shopify. Requiere publicar la app, conseguir tracción real, y solicitar acceso al preview. Detallado en `CLAUDE.md` sección "Objetivo a largo plazo".
