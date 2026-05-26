@@ -243,7 +243,7 @@ Crear `/Users/apple/Documents/shopify-app/seo-app/.env.example`:
 # Shopify (Partner Dashboard → tu app → API credentials)
 SHOPIFY_API_KEY=
 SHOPIFY_API_SECRET=
-SCOPES=read_products,read_content,write_products
+SCOPES=read_products,write_products
 
 # URL pública del deploy (la asigna Railway)
 SHOPIFY_APP_URL=
@@ -354,7 +354,7 @@ En Railway → servicio `seo-app` (el de la app, no Postgres) → tab "Variables
 ```
 SHOPIFY_API_KEY=<de Partner Dashboard → SEO Analyzer → Client credentials>
 SHOPIFY_API_SECRET=<de Partner Dashboard → SEO Analyzer → Client credentials>
-SCOPES=read_products,read_content,write_products
+SCOPES=read_products,write_products
 SHOPIFY_APP_URL=<temporal, lo actualizamos en §6 con la URL Railway>
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 BILLING_TEST=false

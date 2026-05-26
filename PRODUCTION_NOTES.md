@@ -10,7 +10,7 @@ Lista viva de cosas que hay que cambiar / configurar antes de salir a App Store 
 |---|---|---|---|
 | `SHOPIFY_API_KEY` | (auto por CLI) | desde Partner Dashboard | |
 | `SHOPIFY_API_SECRET` | (auto por CLI) | desde Partner Dashboard | |
-| `SCOPES` | (auto por toml) | `read_products,read_content,write_products` | viene del toml |
+| `SCOPES` | (auto por toml) | `read_products,write_products` | viene del toml |
 | `SHOPIFY_APP_URL` | (auto por túnel) | URL pública del deploy (https) | usado por `returnUrl` del billing |
 | `DATABASE_URL` | `file:dev.sqlite` | string de PostgreSQL | cambiar `provider` en `prisma/schema.prisma` a `"postgresql"` antes de migrar |
 | `BILLING_TEST` | `true` (default) | **`false`** | en prod cobramos de verdad — sin esta var Shopify no cobra |
@@ -107,7 +107,7 @@ Ver `CLAUDE.md` sección "Checklist pre-publicación" para la lista completa. Es
 - [x] OAuth flow funcional (scaffold)
 - [x] Billing API integrada (test mode hasta cambiar `BILLING_TEST=false`)
 - [x] UI con Polaris Web Components
-- [x] Scopes mínimos (`read_products,read_content,write_products`)
+- [x] Scopes mínimos (`read_products,write_products`)
 - [ ] App probada en development store con productos reales (manual, requiere QA)
 - [ ] Lighthouse score (no aplica todavía — somos backend de admin)
 - [ ] App desplegada en URL HTTPS estable

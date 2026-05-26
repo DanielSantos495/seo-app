@@ -318,11 +318,11 @@ Cada producto recibe un score **0–100** (función pura en `app/services/seo-an
 ### 7.2 Scopes (`shopify.app.toml`)
 
 ```
-scopes = "read_products,read_content,write_products"
+scopes = "read_products,write_products"
 ```
 - `read_products` → core del análisis (activo en V1).
 - `write_products` → bulk fix de alt texts vía `productUpdateMedia` (activo en V1).
-- `read_content` → **declarado pero NO ejercitado en V1**. Se mantiene para evitar reinstalación forzosa de toda la base cuando V2 introduzca el análisis de páginas/colecciones (Priority 2 en `FUTURE_IDEAS.md`). Hay una nota explicativa al reviewer en `marketing/seo-app/listing-content.md` §12.2 para preempt la pregunta. Si el reviewer insiste igual, se remueve y se vuelve a pedir en V2 (asumiendo el costo de reinstalación entonces).
+- `read_content` → **removido en V1** (no se ejercitaba ningún flujo con él). Evita el flag de "scopes no usados" en el review. Se re-pedirá en V2 cuando se shippee el análisis de páginas/colecciones (Priority 2 en `FUTURE_IDEAS.md`); con managed install eso es un prompt de re-consentimiento para merchants existentes, no una reinstalación.
 
 ### 7.3 GraphQL (API 2026-04)
 
@@ -363,7 +363,7 @@ scopes = "read_products,read_content,write_products"
 |---|---|---|
 | `SHOPIFY_API_KEY` | Partner Dashboard | `bbd179e9f5f501e3917e14dd5297389c` |
 | `SHOPIFY_API_SECRET` | Partner Dashboard | (secreto) |
-| `SCOPES` | `shopify.app.toml` | `read_products,read_content,write_products` |
+| `SCOPES` | `shopify.app.toml` | `read_products,write_products` |
 | `SHOPIFY_APP_URL` | URL pública Railway | `https://seo-app-production-b4fa.up.railway.app` |
 | `DATABASE_URL` | Railway Postgres | `${{Postgres.DATABASE_URL}}` |
 | `NODE_ENV` | Manual | `production` |

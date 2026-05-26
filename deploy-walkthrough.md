@@ -125,7 +125,7 @@ Tres razones:
 |---|---|---|---|
 | `SHOPIFY_API_KEY` | Partner Dashboard → App → Client credentials | `bbd179e9...` | Sí (auth) |
 | `SHOPIFY_API_SECRET` | Partner Dashboard → App → Client credentials | (secret) | Sí (auth + HMAC webhooks) |
-| `SCOPES` | `shopify.app.toml` | `read_products,read_content,write_products` | Sí |
+| `SCOPES` | `shopify.app.toml` | `read_products,write_products` | Sí |
 | `SHOPIFY_APP_URL` | URL pública Railway | `https://seo-app-production-xxx.up.railway.app` | Sí (OAuth + billing returnUrl) |
 | `DATABASE_URL` | Railway → Postgres → Variables | `postgresql://postgres:xxx@xxx.proxy.rlwy.net:xxxx/railway` | Sí |
 | `BILLING_TEST` | Manual | `false` en prod, `true` en dev | Sí (sin `false` no se cobra) |
@@ -242,7 +242,7 @@ Se pegan en el servicio `seo-app` → tab **Variables** → **Raw Editor**:
 ```
 SHOPIFY_API_KEY=bbd179e9f5f501e3917e14dd5297389c
 SHOPIFY_API_SECRET=<copiar del Partner Dashboard>
-SCOPES=read_products,read_content,write_products
+SCOPES=read_products,write_products
 SHOPIFY_APP_URL=https://placeholder.up.railway.app
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 BILLING_TEST=false

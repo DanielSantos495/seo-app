@@ -27,9 +27,9 @@ api_version = "2026-04"
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # read_products  → leer productos, imágenes y campos SEO (core del análisis)
-# read_content   → leer páginas y colecciones (análisis extendido futuro)
 # write_products → bulk fix de alt texts del producto
-scopes = "read_products,read_content,write_products"
+# read_content removido en V1 (no se usaba); se re-pedirá en V2 con análisis de páginas/colecciones.
+scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [ "https://seo-app-production-b4fa.up.railway.app/api/auth" ]
