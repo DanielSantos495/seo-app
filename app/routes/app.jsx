@@ -54,9 +54,45 @@ export default function App() {
   );
 }
 
+// Detecta un fallo de red (no un error HTTP del servidor). App Bridge no pudo
+// completar el fetch del loader: típico tras suspender el equipo o perder la
+// conexión y volver. No trae `status` (no es una Response 4xx/5xx). El mensaje
+// varía por navegador (Chrome "Failed to fetch", Firefox "NetworkError…",
+// Safari "Load failed"), por eso cubrimos el tipo y varios patrones.
+function isNetworkError(error) {
+  if (!error || typeof error.status === "number") return false;
+  if (error instanceof TypeError) return true;
+  return /failed to fetch|networkerror|load failed|network request failed/i.test(
+    String(error.message || ""),
+  );
+}
+
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
   const error = useRouteError();
+
+  // Conexión caída: mensaje accionable en vez del fallback crudo del SDK.
+  if (isNetworkError(error)) {
+    return (
+      <s-page heading="Connection lost">
+        <s-section>
+          <s-banner tone="warning" heading="Couldn't reach the app">
+            <s-paragraph>
+              Your connection dropped — this can happen after your computer
+              went to sleep or the network briefly disconnected. Reload the
+              page to continue.
+            </s-paragraph>
+            <s-button
+              slot="primaryAction"
+              onClick={() => window.location.reload()}
+            >
+              Reload
+            </s-button>
+          </s-banner>
+        </s-section>
+      </s-page>
+    );
+  }
 
   // Fallback legible cuando el `boundary.error` del SDK no logra renderizar
   // el error (típico cuando la sesión tiene scopes viejos → 403 al validar).
