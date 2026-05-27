@@ -277,9 +277,11 @@ shopify-app/                            ← Monorepo root (no es git repo)
 
 | Path local | Repo GitHub | Branch primario |
 |---|---|---|
-| `seo-app/` | `git@github.com:DanielSantos495/seo-app.git` | `feature/deploy-prep` (no mergeado a `main` aún) |
+| `seo-app/` | `git@github.com:DanielSantos495/seo-app.git` | `main` (prod · Railway auto-deploy) · `dev` (desarrollo) |
 | `cury-apps-site/` | `git@github.com:DanielSantos495/curyapp-website.git` | `main` |
 | `marketing/`, `assets/`, root | (no es repo) | local only |
+
+**Modelo de ramas (`seo-app/`)**: `main` = producción (Railway despliega desde aquí). `dev` = rama de desarrollo; el día a día sale de ramas feature → merge a `dev` → merge a `main` para release. Dev corre 100% aislado contra el app **"Cury SEO (dev)"** (`client_id d4aec87c…`) + dev store + Postgres local (ver §9 "Entornos Dev / Prod"). La rama histórica `feature/deploy-prep` ya quedó mergeada a `main`.
 
 ---
 
