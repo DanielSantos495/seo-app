@@ -357,6 +357,36 @@ scopes = "read_products,write_products"
 
 ## 9. Configuración y entorno
 
+### Entornos Dev / Prod (cómo cambiar)
+
+Dos entornos **totalmente aislados**. **Nunca** correr `shopify app dev` con el config de prod activo: el túnel sobrescribe la `application_url` de producción y tumba la app en review.
+
+| | Dev | Prod |
+|---|---|---|
+| App (Partner Dashboard) | "Cury SEO (Dev)" | "Cury SEO" |
+| Config CLI | `shopify.app.dev.toml` | `shopify.app.toml` |
+| Tienda | dev store dedicada | review/live store |
+| Base de datos | Postgres local (Docker) | Railway managed Postgres |
+| Hosting | local (túnel de `shopify app dev`) | Railway (auto-deploy desde `main`) |
+| `automatically_update_urls_on_dev` | `true` | `false` |
+
+```bash
+nvm use 22        # pnpm 11 requiere Node >= 22.13
+
+# Desarrollo
+pnpm db:up        # levanta Postgres local
+pnpm dev          # activa config dev + shopify app dev
+
+# Cambiar config a mano
+pnpm shopify app config use dev               # dev
+pnpm shopify app config use shopify.app.toml  # prod
+
+# Release de código a prod  → merge a main, Railway auto-deploya
+# Release de config Shopify  → pnpm deploy:prod (solo con config prod activo)
+```
+
+Setup inicial del dev (una vez): crear app "Cury SEO (Dev)" + dev store en Partner Dashboard, luego `pnpm shopify app config link --config dev --client-id <DEV_CLIENT_ID>`, `pnpm db:up` y `pnpm prisma migrate dev`. Detalle completo en `README.md` y en `docs/superpowers/specs/2026-05-27-dev-prod-environments-design.md`.
+
 ### Variables de entorno (`.env.example`)
 
 | Variable | Origen | Prod |

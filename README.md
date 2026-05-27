@@ -6,6 +6,50 @@ Rather than cloning this repo, follow the [Quick Start steps](https://github.com
 
 Visit the [`shopify.dev` documentation](https://shopify.dev/docs/api/shopify-app-react-router) for more details on the React Router app package.
 
+## Cury SEO — Dev / Prod environments
+
+This app runs in two fully isolated environments. **Never run `shopify app dev` against the production app** — it would overwrite the production URL in the Partner Dashboard and take the live app down.
+
+|            | Dev                              | Prod                          |
+| ---------- | -------------------------------- | ----------------------------- |
+| Shopify app| "Cury SEO (Dev)"                 | "Cury SEO"                    |
+| Config file| `shopify.app.dev.toml`           | `shopify.app.toml`            |
+| Store      | dedicated development store      | review / live store           |
+| Database   | local Postgres (Docker)          | Railway managed Postgres      |
+| Hosting    | local (`shopify app dev` tunnel) | Railway (auto-deploy `main`)  |
+
+### Daily development
+
+```shell
+nvm use 22        # pnpm 11 requires Node >= 22.13
+pnpm db:up        # start local Postgres (docker-compose.yml)
+pnpm dev          # activates the dev config, then runs `shopify app dev`
+```
+
+### Switch the active config manually
+
+```shell
+pnpm shopify app config use dev               # -> dev app
+pnpm shopify app config use shopify.app.toml  # -> prod app
+```
+
+### Release to production
+
+```shell
+# Code: merge to main; Railway auto-deploys from main
+git checkout main && git merge <branch> && git push
+
+# Shopify config (URLs / scopes / webhooks): only with the prod config active
+pnpm deploy:prod
+```
+
+### First-time dev setup
+
+1. Create the **"Cury SEO (Dev)"** app in the Partner Dashboard and copy its Client ID.
+2. Create a development store and assign the dev app to it.
+3. Link the dev config: `pnpm shopify app config link --config dev --client-id <DEV_CLIENT_ID>`
+4. `pnpm db:up`, point `.env` `DATABASE_URL` to local Postgres, then `pnpm prisma migrate dev`.
+
 ## Upgrading from Remix
 
 If you have an existing Remix app that you want to upgrade to React Router, please follow the [upgrade guide](https://github.com/Shopify/shopify-app-template-react-router/wiki/Upgrading-from-Remix). Otherwise, please follow the quick start guide below.

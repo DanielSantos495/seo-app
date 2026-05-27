@@ -1,0 +1,24 @@
+# Postgres local para desarrollo de Cury SEO.
+# Levantar: pnpm db:up   ·   Apagar: pnpm db:down
+# La app dev apunta aquí vía DATABASE_URL en .env (localhost:5432).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cury-seo-dev-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cury_seo_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - cury_seo_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cury_seo_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  cury_seo_dev_data:
