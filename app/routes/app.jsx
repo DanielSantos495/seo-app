@@ -8,19 +8,22 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
+import { getPlan } from "../services/plan";
 import { NavLink } from "../components/NavLink";
 import { RouteSkeleton } from "../components/RouteSkeleton";
 
-// El layout autentica una sola vez y expone los datos básicos de la sesión.
-// V1 free: no hay distinción de plan ni límites.
+// El layout autentica una sola vez, resuelve el plan del merchant (Managed
+// Pricing) y expone esos datos al árbol de rutas vía loader data.
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, billing } = await authenticate.admin(request);
+  const plan = await getPlan(billing);
 
   return {
     // eslint-disable-next-line no-undef
     apiKey: process.env.SHOPIFY_API_KEY || "",
     shop: session.shop,
     shopHandle: session.shop.replace(/\.myshopify\.com$/, ""),
+    plan,
   };
 };
 
