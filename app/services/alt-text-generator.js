@@ -12,7 +12,7 @@
 //
 // Solo genera alt para imágenes con `altText` vacío — nunca sobreescribe.
 
-const MAX_LENGTH = 125;
+export const MAX_LENGTH = 125;
 const DEFAULT_VARIANT_TITLE = "Default Title";
 
 export function generateAltTexts(product) {
@@ -69,7 +69,7 @@ function extractCommonFirstOption(variantTitles) {
   return allEqual ? firstSegments[0] : variantTitles[0];
 }
 
-function truncate(text) {
+export function truncate(text) {
   if (text.length <= MAX_LENGTH) return text;
   return `${text.slice(0, MAX_LENGTH - 1)}…`;
 }
