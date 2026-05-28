@@ -21,7 +21,7 @@
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
-    "clear-alts": "node scripts/clear-alt-texts.js cury-vdrxupzo.myshopify.com --only-with-alt"
+    "clear-alts": "node scripts/clear-alt-texts.js artesamir.myshopify.com --only-with-alt"
   },
   "type": "module",
   "engines": {
