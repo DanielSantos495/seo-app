@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useActionData,
   useLoaderData,
   useNavigation,
+  useRouteLoaderData,
   useSubmit,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -92,10 +93,13 @@ const SCORE_TONE = (score) => {
 
 export default function ProductDetail() {
   const { product, analysis, proposedAlts } = useLoaderData();
+  const { plan, aiAltRemaining, upgradeUrl } = useRouteLoaderData("routes/app");
   const actionData = useActionData();
   const navigation = useNavigation();
   const submit = useSubmit();
   const shopify = useAppBridge();
+
+  const [useAI, setUseAI] = useState(false);
 
   const editUrl = productAdminUrl(product.id);
   const featured = product.images?.[0];
@@ -110,11 +114,19 @@ export default function ProductDetail() {
     if (!actionData || shownToastRef.current === actionData) return;
     shownToastRef.current = actionData;
     if (actionData.ok) {
-      shopify.toast.show(
-        actionData.count === 0
-          ? "No images on this product need alt text"
-          : `Done: ${actionData.count} alt text${actionData.count === 1 ? "" : "s"} added`,
-      );
+      if (actionData.count === 0) {
+        shopify.toast.show("No images on this product need alt text");
+      } else {
+        const aiCount = actionData.aiCount ?? 0;
+        const naiveCount = actionData.naiveCount ?? 0;
+        let msg = `Done: ${actionData.count} alt text${actionData.count === 1 ? "" : "s"} added`;
+        if (aiCount > 0 && naiveCount > 0) {
+          msg += ` (${aiCount} with AI · ${naiveCount} with pattern)`;
+        } else if (aiCount > 0) {
+          msg += ` (${aiCount} with AI)`;
+        }
+        shopify.toast.show(msg);
+      }
     } else if (actionData.error) {
       shopify.toast.show(`Error: ${actionData.error}`, { isError: true });
     }
@@ -188,6 +200,32 @@ export default function ProductDetail() {
                 {proposedAlts.length === 1 ? "" : "s"} on this product. Images
                 that already have alt text won&apos;t be changed.
               </s-paragraph>
+              {plan !== "free" ? (
+                <s-stack direction="block" gap="small-300">
+                  <s-checkbox
+                    label="Generate with AI (better quality)"
+                    checked={useAI}
+                    {...(aiAltRemaining === 0 ? { disabled: true } : {})}
+                    onChange={(e) => setUseAI(e.target.checked)}
+                  />
+                  {aiAltRemaining === 0 ? (
+                    <s-text tone="subdued">
+                      AI quota exhausted for this month — alt texts will use the pattern.
+                    </s-text>
+                  ) : (
+                    <s-text tone="subdued">
+                      {aiAltRemaining} AI generation{aiAltRemaining === 1 ? "" : "s"} left this month
+                    </s-text>
+                  )}
+                </s-stack>
+              ) : (
+                <s-stack direction="block" gap="small-300">
+                  <s-text tone="subdued">AI alt text is a Pro feature.</s-text>
+                  <s-button href={upgradeUrl} target="_top">
+                    Upgrade to Pro
+                  </s-button>
+                </s-stack>
+              )}
               <s-stack direction="block" gap="small-300">
                 <s-text tone="subdued">Preview:</s-text>
                 {proposedAlts.map((p) => (
@@ -204,7 +242,7 @@ export default function ProductDetail() {
               variant="primary"
               {...(isApplying ? { loading: true } : {})}
               onClick={() => {
-                if (!isApplying) submit({}, { method: "post" });
+                if (!isApplying) submit({ useAI: String(useAI) }, { method: "post" });
               }}
             >
               Apply {proposedAlts.length} change

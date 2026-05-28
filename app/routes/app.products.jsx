@@ -9,6 +9,7 @@ import {
   useFetcher,
   useLoaderData,
   useRevalidator,
+  useRouteLoaderData,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -120,6 +121,7 @@ export default function Products() {
     isStale,
     bulkFix,
   } = useLoaderData();
+  const { plan, aiAltRemaining, upgradeUrl } = useRouteLoaderData("routes/app");
   const shopify = useAppBridge();
   // Preview fetcher: trae los samples cuando se abre el modal.
   const previewFetcher = useFetcher();
@@ -165,10 +167,18 @@ export default function Products() {
         } else if (totalImages === 0) {
           shopify.toast.show("Products already had alt text — list updated");
         } else {
-          shopify.toast.show(
-            `Done: ${ok} product${ok === 1 ? "" : "s"} · ${totalImages} alt text${totalImages === 1 ? "" : "s"} added${errCount ? ` · ${errCount} error${errCount === 1 ? "" : "s"}` : ""}`,
-            errCount ? { isError: true } : undefined,
-          );
+          const aiCount = summary.aiCount ?? 0;
+          const naiveCount = summary.naiveCount ?? 0;
+          let msg = `Done: ${ok} product${ok === 1 ? "" : "s"} · ${totalImages} alt text${totalImages === 1 ? "" : "s"} added`;
+          if (aiCount > 0 && naiveCount > 0) {
+            msg += ` (${aiCount} with AI · ${naiveCount} with pattern)`;
+          } else if (aiCount > 0) {
+            msg += ` (${aiCount} with AI)`;
+          } else if (naiveCount > 0 && useAI) {
+            msg += ` (${naiveCount} with pattern)`;
+          }
+          if (errCount) msg += ` · ${errCount} error${errCount === 1 ? "" : "s"}`;
+          shopify.toast.show(msg, errCount ? { isError: true } : undefined);
         }
       }
       revalidator.revalidate();
@@ -186,6 +196,7 @@ export default function Products() {
 
   const isApplying = bulkFetcher.state !== "idle" || isBulkRunning;
 
+  const [useAI, setUseAI] = useState(false);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState("worst");
   const [page, setPage] = useState(1);
@@ -433,6 +444,32 @@ export default function Products() {
                 {bulkFix.processable === 1 ? "" : "s"} and add alt text to
                 images that don&apos;t have it.
               </s-paragraph>
+              {plan !== "free" ? (
+                <s-stack direction="block" gap="small-300">
+                  <s-checkbox
+                    label="Generate with AI (better quality)"
+                    checked={useAI}
+                    {...(aiAltRemaining === 0 ? { disabled: true } : {})}
+                    onChange={(e) => setUseAI(e.target.checked)}
+                  />
+                  {aiAltRemaining === 0 ? (
+                    <s-text tone="subdued">
+                      AI quota exhausted for this month — alt texts will use the pattern.
+                    </s-text>
+                  ) : (
+                    <s-text tone="subdued">
+                      {aiAltRemaining} AI generation{aiAltRemaining === 1 ? "" : "s"} left this month
+                    </s-text>
+                  )}
+                </s-stack>
+              ) : (
+                <s-stack direction="block" gap="small-300">
+                  <s-text tone="subdued">AI alt text is a Pro feature.</s-text>
+                  <s-button href={upgradeUrl} target="_top">
+                    Upgrade to Pro
+                  </s-button>
+                </s-stack>
+              )}
               {isBulkRunning && (
                 <JobProgress job={bulkJob} label="Applying alt texts" />
               )}
@@ -463,7 +500,7 @@ export default function Products() {
               {...(isApplying ? { loading: true } : {})}
               {...(isBulkRunning ? { disabled: true } : {})}
               onClick={() => {
-                if (!isApplying) bulkFetcher.submit({}, { method: "post" });
+                if (!isApplying) bulkFetcher.submit({ useAI: String(useAI) }, { method: "post" });
               }}
             >
               {isBulkRunning

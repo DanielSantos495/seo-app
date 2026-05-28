@@ -8,7 +8,8 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
-import { getPlanInfo, PLAN_LABEL } from "../services/plan";
+import { getPlanInfo, PLAN_LABEL, pricingPageUrl } from "../services/plan";
+import { remaining } from "../services/ai-usage";
 import { NavLink } from "../components/NavLink";
 import { RouteSkeleton } from "../components/RouteSkeleton";
 
@@ -20,14 +21,21 @@ export const loader = async ({ request }) => {
   // Título legible para la UI: "<nombre real del plan> (<tier>)", o "Free" si
   // no hay suscripción. Ej: "Pro Test (Pro)".
   const planLabel = name ? `${name} (${PLAN_LABEL[tier]})` : PLAN_LABEL[tier];
+  const shopHandle = session.shop.replace(/\.myshopify\.com$/, "");
+
+  const [aiAltRemaining] = await Promise.all([
+    remaining(session.shop, tier, "aiAlt"),
+  ]);
 
   return {
     // eslint-disable-next-line no-undef
     apiKey: process.env.SHOPIFY_API_KEY || "",
     shop: session.shop,
-    shopHandle: session.shop.replace(/\.myshopify\.com$/, ""),
+    shopHandle,
     plan: tier,
     planLabel,
+    aiAltRemaining,
+    upgradeUrl: pricingPageUrl(shopHandle),
   };
 };
 
