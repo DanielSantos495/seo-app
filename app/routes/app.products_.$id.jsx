@@ -11,10 +11,11 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
   fetchProductById,
-  updateProductAltTexts,
+  bulkFixAltTextsForProducts,
 } from "../services/shopify-api";
 import { analyzeProduct } from "../services/seo-analyzer";
 import { generateAltTexts } from "../services/alt-text-generator";
+import { getPlanInfo } from "../services/plan";
 import { productAdminUrl } from "../services/admin-links";
 import { resizeCdnUrl } from "../services/image-url";
 import { updateCachedItems } from "../services/seo-cache";
@@ -45,30 +46,30 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request, params }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
+  // `useAI` es preferencia del cliente; el plan se resuelve server-side y la
+  // quota gatea el uso real (free → budget 0 → sin IA). Reusamos el mismo
+  // motor que el bulk (IA + quota + fallback determinista por imagen).
+  const useAI = (await request.formData()).get("useAI") === "true";
+  const { tier } = await getPlanInfo(billing);
 
   const gid = `gid://shopify/Product/${params.id}`;
-  const product = await fetchProductById(admin, gid);
-  if (!product) {
-    throw new Response("Product not found", { status: 404 });
-  }
+  const result = await bulkFixAltTextsForProducts(admin, [gid], {
+    useAI,
+    shop: session.shop,
+    plan: tier,
+    locale: session.locale ?? null,
+  });
 
-  const altTexts = generateAltTexts(product);
-  if (altTexts.size === 0) {
+  if (result.errors.length > 0) {
+    return { ok: false, error: result.errors.map((e) => e.message).join("; ") };
+  }
+  if (result.totalImages === 0) {
     return { ok: true, count: 0 };
   }
 
-  const result = await updateProductAltTexts(admin, gid, altTexts);
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.userErrors.map((e) => e.message).join("; "),
-    };
-  }
-
-  // Update granular: solo actualizamos este producto en el cache. Antes
-  // invalidábamos todo, lo que forzaba un re-fetch completo del catálogo en
-  // la siguiente navegación. Re-analizamos con la data fresca de Shopify.
+  // Update granular: solo actualizamos este producto en el cache. Re-analizamos
+  // con la data fresca de Shopify (evita re-fetch completo del catálogo).
   const refreshed = await fetchProductById(admin, gid);
   if (refreshed) {
     const newAnalysis = analyzeProduct(refreshed);
@@ -77,12 +78,16 @@ export const action = async ({ request, params }) => {
       score: newAnalysis.score,
       issues: newAnalysis.issues,
       thumbnailUrl: refreshed.images?.[0]?.url || item.thumbnailUrl,
-      thumbnailAlt:
-        refreshed.images?.[0]?.altText || item.thumbnailAlt,
+      thumbnailAlt: refreshed.images?.[0]?.altText || item.thumbnailAlt,
     }));
   }
 
-  return { ok: true, count: altTexts.size };
+  return {
+    ok: true,
+    count: result.totalImages,
+    aiCount: result.aiCount,
+    naiveCount: result.naiveCount,
+  };
 };
 
 const SCORE_TONE = (score) => {

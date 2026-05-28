@@ -174,7 +174,7 @@ export default function Products() {
             msg += ` (${aiCount} with AI · ${naiveCount} with pattern)`;
           } else if (aiCount > 0) {
             msg += ` (${aiCount} with AI)`;
-          } else if (naiveCount > 0 && useAI) {
+          } else if (naiveCount > 0 && submittedUseAIRef.current) {
             msg += ` (${naiveCount} with pattern)`;
           }
           if (errCount) msg += ` · ${errCount} error${errCount === 1 ? "" : "s"}`;
@@ -197,6 +197,9 @@ export default function Products() {
   const isApplying = bulkFetcher.state !== "idle" || isBulkRunning;
 
   const [useAI, setUseAI] = useState(false);
+  // Captura el useAI enviado, para que el toast (que corre al terminar el job)
+  // no dependa del estado actual del checkbox si el merchant lo cambió después.
+  const submittedUseAIRef = useRef(false);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState("worst");
   const [page, setPage] = useState(1);
@@ -500,7 +503,10 @@ export default function Products() {
               {...(isApplying ? { loading: true } : {})}
               {...(isBulkRunning ? { disabled: true } : {})}
               onClick={() => {
-                if (!isApplying) bulkFetcher.submit({ useAI: String(useAI) }, { method: "post" });
+                if (!isApplying) {
+                  submittedUseAIRef.current = useAI;
+                  bulkFetcher.submit({ useAI: String(useAI) }, { method: "post" });
+                }
               }}
             >
               {isBulkRunning
