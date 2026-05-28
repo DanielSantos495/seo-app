@@ -64,30 +64,45 @@ async function runAnalysisJob(jobId, shop, admin) {
 // Dispara un job de bulk fix de alt texts. `productGids` viene del cache
 // (filtrado server-side, no del cliente). Sin cap: si la tienda tiene 1834
 // elegibles, los procesamos todos.
-export async function startBulkAltJob(shop, admin, productGids) {
+// `opts` puede incluir { useAI, plan, locale } para habilitar la ruta AI.
+export async function startBulkAltJob(shop, admin, productGids, opts = {}) {
   const existing = await findActiveJob(shop, "bulk_alt");
   if (existing) return existing;
 
+  const { useAI = false, plan = "free", locale = null } = opts;
+
   const job = await createJob(shop, "bulk_alt", {
     total: productGids.length,
-    payload: { productGids },
+    payload: { productGids, useAI, plan, locale },
   });
 
-  runBulkAltJob(job.id, shop, admin, productGids).catch(async (err) => {
-    console.error("[seo-job] bulk_alt failed", err);
-    await failJob(job.id, err.message);
-  });
+  runBulkAltJob(job.id, shop, admin, productGids, { useAI, plan, locale }).catch(
+    async (err) => {
+      console.error("[seo-job] bulk_alt failed", err);
+      await failJob(job.id, err.message);
+    },
+  );
 
   return job;
 }
 
-async function runBulkAltJob(jobId, shop, admin, productGids) {
+async function runBulkAltJob(
+  jobId,
+  shop,
+  admin,
+  productGids,
+  { useAI = false, plan = "free", locale = null } = {},
+) {
   await startJob(jobId);
 
   const result = await bulkFixAltTextsForProducts(admin, productGids, {
     onProgress: async ({ processed }) => {
       await bumpProgress(jobId, { processed });
     },
+    useAI,
+    shop,
+    plan,
+    locale,
   });
 
   // Update granular del cache: solo los productos que tocamos. Mucho mejor
@@ -118,6 +133,8 @@ async function runBulkAltJob(jobId, shop, admin, productGids) {
       totalProducts: result.totalProducts,
       totalImages: result.totalImages,
       errors: result.errors,
+      aiCount: result.aiCount,
+      naiveCount: result.naiveCount,
     },
   });
 }

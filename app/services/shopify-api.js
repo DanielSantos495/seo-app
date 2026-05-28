@@ -5,6 +5,9 @@
 // maneja rate-limit + retries de forma centralizada.
 
 import { shopifyGraphql } from "./shopify-fetch";
+import { remaining, increment } from "./ai-usage";
+import { generateAltTextWithAI } from "./alt-text-ai";
+import { resizeCdnUrl } from "./image-url";
 
 // En API 2026-04 las imágenes viven bajo `media` (modelo unificado con
 // videos/3D). Para SEO solo nos interesan las MediaImage.
@@ -182,6 +185,62 @@ export async function previewAltTextsForProducts(
   return samples;
 }
 
+// Elige qué alt usar para cada imagen sin alt de un producto.
+// Testeable de forma unitaria sin necesitar admin/GraphQL.
+//
+// Parámetros:
+//   missingImages  - array de { id, url } (imágenes sin alt)
+//   naiveAlts      - Map<imageId, string> del generador determinístico
+//   useAI          - boolean
+//   aiBudget       - número de generaciones AI disponibles (mutable fuera)
+//   aiFn           - async (imageUrl, productTitle, locale) → string | lanza
+//   productTitle   - título del producto (para aiFn)
+//   locale         - locale BCP-47 o null
+//
+// Devuelve:
+//   { alts: Map<imageId, string>, aiUsed: number, naiveUsed: number }
+//   y no muta aiBudget (el caller lo actualiza con aiUsed).
+export async function chooseAlts({
+  missingImages,
+  naiveAlts,
+  useAI,
+  aiBudget,
+  aiFn,
+  productTitle,
+  locale,
+}) {
+  const alts = new Map();
+  let aiUsed = 0;
+  let naiveUsed = 0;
+  let budgetLeft = aiBudget;
+
+  for (const image of missingImages) {
+    const naiveFallback = naiveAlts.get(image.id) ?? "";
+
+    if (useAI && budgetLeft > 0 && image.url) {
+      try {
+        const aiAlt = await aiFn(
+          resizeCdnUrl(image.url, 512),
+          productTitle,
+          locale,
+        );
+        alts.set(image.id, aiAlt);
+        aiUsed++;
+        budgetLeft--;
+      } catch {
+        // Fallback silencioso al determinístico para esta imagen.
+        alts.set(image.id, naiveFallback);
+        naiveUsed++;
+      }
+    } else {
+      alts.set(image.id, naiveFallback);
+      naiveUsed++;
+    }
+  }
+
+  return { alts, aiUsed, naiveUsed };
+}
+
 // Bulk fix secuencial. El throttle viejo de 800ms quedó obsoleto: ahora el
 // rate-limit lo maneja `shopifyGraphql` leyendo el bucket real de Shopify
 // (ver shopify-fetch.js). Esto baja el tiempo total ~30-40% cuando hay
@@ -190,16 +249,29 @@ export async function previewAltTextsForProducts(
 // `onProgress({ processed, fixedProductIds })`: callback opcional invocado
 // tras cada producto procesado. Se usa para persistir heartbeat del job y que
 // el cliente pueda mostrar progreso por polling.
+//
+// Opciones AI: useAI, shop, plan, locale. Si useAI=false (default) el flujo
+// determinístico queda intacto. Si useAI=true se obtiene un budget al inicio
+// y se va gastando producto a producto; el fallback determinístico actúa
+// imagen a imagen cuando la IA lanza o el budget se agota.
 export async function bulkFixAltTextsForProducts(
   admin,
   productGids,
-  { onProgress } = {},
+  { onProgress, useAI = false, shop = null, plan = "free", locale = null } = {},
 ) {
   const { generateAltTexts } = await import("./alt-text-generator");
   let totalImages = 0;
+  let totalAiCount = 0;
+  let totalNaiveCount = 0;
   let processed = 0;
   const errors = [];
   const fixedProductIds = [];
+
+  // Presupuesto AI leído una sola vez al inicio del job.
+  let aiBudget = 0;
+  if (useAI && shop) {
+    aiBudget = await remaining(shop, plan, "aiAlt");
+  }
 
   for (const gid of productGids) {
     try {
@@ -226,16 +298,42 @@ export async function bulkFixAltTextsForProducts(
         continue;
       }
 
-      const alts = generateAltTexts(product);
-      if (alts.size === 0) {
+      const naiveAlts = generateAltTexts(product);
+      if (naiveAlts.size === 0) {
         processed++;
         if (onProgress) await onProgress({ processed, fixedProductIds });
         continue;
       }
+
+      // Imágenes sin alt (las que generateAltTexts también filtra).
+      const missingImages = (product.images || []).filter(
+        (img) => !img.altText?.trim(),
+      );
+
+      const { alts, aiUsed, naiveUsed } = await chooseAlts({
+        missingImages,
+        naiveAlts,
+        useAI,
+        aiBudget,
+        aiFn: (imageUrl, productTitle, loc) =>
+          generateAltTextWithAI({ imageUrl, productTitle, locale: loc }),
+        productTitle: product.title,
+        locale,
+      });
+
+      // Actualizar el budget local con lo consumido en este producto.
+      aiBudget -= aiUsed;
+      totalAiCount += aiUsed;
+      totalNaiveCount += naiveUsed;
+
       const result = await updateProductAltTexts(admin, gid, alts);
       if (result.ok) {
         totalImages += alts.size;
         fixedProductIds.push(gid);
+        // Persistir uso AI en DB si se consumieron créditos en este producto.
+        if (aiUsed > 0 && shop) {
+          await increment(shop, "aiAlt", aiUsed);
+        }
       } else {
         errors.push({
           productId: gid,
@@ -254,6 +352,8 @@ export async function bulkFixAltTextsForProducts(
     totalImages,
     errors,
     fixedProductIds,
+    aiCount: totalAiCount,
+    naiveCount: totalNaiveCount,
   };
 }
 

@@ -17,6 +17,7 @@ import { getCachedItems } from "../services/seo-cache";
 import { gidToNumericId } from "../services/admin-links";
 import { resizeCdnUrl } from "../services/image-url";
 import { findActiveJob, serializeJob } from "../services/seo-job";
+import { getPlanInfo } from "../services/plan";
 import {
   startAnalysisJob,
   startBulkAltJob,
@@ -71,8 +72,19 @@ export const loader = async ({ request }) => {
 
 // El action dispara un job de bulk fix y devuelve inmediatamente el jobId.
 // El cliente polléa /api/job-status para ver progreso. Sin bloqueo del POST.
+//
+// El plan se resuelve SIEMPRE server-side (billing.check). El cliente puede
+// enviar `useAI=true` (Phase D lo hará), pero el plan real determina el budget:
+// una tienda free tiene quota 0 → budget 0 → el AI nunca corre aunque useAI=true.
 export const action = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, billing } = await authenticate.admin(request);
+
+  // useAI enviado por el cliente (Phase D). Por defecto false.
+  const formData = await request.formData();
+  const useAI = formData.get("useAI") === "true";
+
+  // Plan real siempre resuelto server-side.
+  const { tier } = await getPlanInfo(billing);
 
   // Tomamos los elegibles directamente del cache pre-computado.
   const cached = await getCachedItems(session.shop);
@@ -84,7 +96,11 @@ export const action = async ({ request }) => {
     return { ok: true, jobId: null, empty: true };
   }
 
-  const job = await startBulkAltJob(session.shop, admin, eligibleGids);
+  const job = await startBulkAltJob(session.shop, admin, eligibleGids, {
+    useAI,
+    plan: tier,
+    locale: session.locale ?? null,
+  });
   return { ok: true, jobId: job.id };
 };
 
