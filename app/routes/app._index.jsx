@@ -3,6 +3,7 @@ import {
   redirect,
   useLoaderData,
   useRevalidator,
+  useRouteLoaderData,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -120,6 +121,9 @@ export default function Index() {
     isStale,
   } = useLoaderData();
 
+  // El plan resuelto en el layout (app.jsx), para saber en qué plan estamos.
+  const { planLabel } = useRouteLoaderData("routes/app");
+
   // Polling del job de análisis: si hay uno corriendo (sea porque no había
   // cache o porque el cache es stale), trackeamos su progreso y revalidamos
   // el loader cuando termina para mostrar el reporte fresco.
@@ -163,6 +167,7 @@ export default function Index() {
 
   return (
     <s-page heading="SEO Analyzer">
+      <s-badge tone="info">Plan: {planLabel}</s-badge>
       {failedJob && !isActive && (
         <s-banner tone="critical" heading="Last analysis failed">
           <s-paragraph>

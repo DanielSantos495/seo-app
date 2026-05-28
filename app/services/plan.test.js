@@ -5,6 +5,7 @@ import {
   can,
   quota,
   getPlan,
+  getPlanInfo,
   pricingPageUrl,
 } from "./plan.js";
 
@@ -13,6 +14,7 @@ describe("planFromSubscriptionName", () => {
     expect(planFromSubscriptionName("Pro")).toBe(PLAN.PRO);
     expect(planFromSubscriptionName("pro")).toBe(PLAN.PRO);
     expect(planFromSubscriptionName("Pro+")).toBe(PLAN.PRO_PLUS);
+    expect(planFromSubscriptionName("Pro Test")).toBe(PLAN.PRO);
   });
 
   it("trims surrounding whitespace before matching", () => {
@@ -95,6 +97,43 @@ describe("getPlan", () => {
     process.env.BILLING_TEST = "true";
     await getPlan(billing);
     expect(billing.check).toHaveBeenNthCalledWith(2, { isTest: true });
+  });
+});
+
+describe("getPlanInfo", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns the raw subscription name and resolved tier", async () => {
+    const billing = {
+      check: vi
+        .fn()
+        .mockResolvedValue({ appSubscriptions: [{ name: "Pro Test" }] }),
+    };
+    await expect(getPlanInfo(billing)).resolves.toEqual({
+      name: "Pro Test",
+      tier: PLAN.PRO,
+    });
+  });
+
+  it("returns null name and FREE when there is no active subscription", async () => {
+    const billing = {
+      check: vi.fn().mockResolvedValue({ appSubscriptions: [] }),
+    };
+    await expect(getPlanInfo(billing)).resolves.toEqual({
+      name: null,
+      tier: PLAN.FREE,
+    });
+  });
+
+  it("fails closed to null/FREE when billing.check throws", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const billing = { check: vi.fn().mockRejectedValue(new Error("network")) };
+    await expect(getPlanInfo(billing)).resolves.toEqual({
+      name: null,
+      tier: PLAN.FREE,
+    });
   });
 });
 

@@ -8,7 +8,7 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
-import { getPlan } from "../services/plan";
+import { getPlanInfo, PLAN_LABEL } from "../services/plan";
 import { NavLink } from "../components/NavLink";
 import { RouteSkeleton } from "../components/RouteSkeleton";
 
@@ -16,14 +16,18 @@ import { RouteSkeleton } from "../components/RouteSkeleton";
 // Pricing) y expone esos datos al árbol de rutas vía loader data.
 export const loader = async ({ request }) => {
   const { session, billing } = await authenticate.admin(request);
-  const plan = await getPlan(billing);
+  const { name, tier } = await getPlanInfo(billing);
+  // Título legible para la UI: "<nombre real del plan> (<tier>)", o "Free" si
+  // no hay suscripción. Ej: "Pro Test (Pro)".
+  const planLabel = name ? `${name} (${PLAN_LABEL[tier]})` : PLAN_LABEL[tier];
 
   return {
     // eslint-disable-next-line no-undef
     apiKey: process.env.SHOPIFY_API_KEY || "",
     shop: session.shop,
     shopHandle: session.shop.replace(/\.myshopify\.com$/, ""),
-    plan,
+    plan: tier,
+    planLabel,
   };
 };
 

@@ -9,12 +9,22 @@ export const PLAN = {
   PRO_PLUS: "pro_plus",
 };
 
+// Etiqueta legible del tier para mostrar en la UI.
+export const PLAN_LABEL = {
+  [PLAN.FREE]: "Free",
+  [PLAN.PRO]: "Pro",
+  [PLAN.PRO_PLUS]: "Pro+",
+};
+
 // Mapea el NOMBRE de la suscripción de Shopify (tal cual está en el Partner
 // Dashboard, Managed Pricing) → tier interno. Las claves van en minúscula
 // para tolerar diferencias de capitalización.
 const SUBSCRIPTION_NAME_TO_TIER = {
   pro: PLAN.PRO,
   "pro+": PLAN.PRO_PLUS,
+  // $0 private test plan (dev): billing.check devuelve el display name "Pro Test".
+  // Solo existe como plan privado; ningún merchant real lo tiene.
+  "pro test": PLAN.PRO,
 };
 
 // Mapa declarativo tier → capabilities (boolean) y quotas (number).
@@ -78,20 +88,27 @@ function isTestBilling() {
   return process.env.BILLING_TEST !== "false";
 }
 
-// Lee el plan activo del merchant vía billing.check. NUNCA lanza:
-// cualquier error o nombre desconocido → FREE (fail-closed).
-export async function getPlan(billing) {
+// Lee la suscripción activa vía billing.check y devuelve el nombre crudo del
+// plan + el tier resuelto. NUNCA lanza: cualquier error → FREE sin nombre
+// (fail-closed). `name` es null si no hay suscripción activa.
+export async function getPlanInfo(billing) {
   try {
     const { appSubscriptions } = await billing.check({ isTest: isTestBilling() });
-    return planFromSubscriptionName(appSubscriptions?.[0]?.name);
+    const name = appSubscriptions?.[0]?.name ?? null;
+    return { name, tier: planFromSubscriptionName(name) };
   } catch (error) {
     // eslint-disable-next-line no-console
     console.warn(
       "[plan] billing.check failed → treating as free:",
       error?.message || error,
     );
-    return PLAN.FREE;
+    return { name: null, tier: PLAN.FREE };
   }
+}
+
+// Conveniencia para gating: solo el tier. Delega en getPlanInfo (DRY).
+export async function getPlan(billing) {
+  return (await getPlanInfo(billing)).tier;
 }
 
 // URL de la página de planes hosteada por Shopify (Managed Pricing).
