@@ -163,7 +163,7 @@ Resueltos los prerequisitos de §6.1:
 
 ## 9. Decisiones abiertas (fuera del alcance de este spec)
 
-- Handle exacto del app de **prod** (para `APP_HANDLE` en Railway).
+- ~~Handle exacto del app de **prod** (para `APP_HANDLE` en Railway).~~ RESUELTO 2026-05-28: `seo-app-78` (seteado en Railway). Dev = `cury-seo-dev`.
 - Si `billing.check` con Managed Pricing requiere o no declarar los nombres de plan en `plans`.
 - Precio/nombre final del plan (validación vs competencia: tarea aparte del spec de tiering §4).
 - Webhook `app_subscriptions/update` para invalidar cache al instante (se evalúa cuando haya
