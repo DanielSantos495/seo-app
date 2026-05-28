@@ -75,3 +75,16 @@ model SeoJob {
   @@index([shop, status])
   @@index([shop, type, status])
 }
+
+// Consumo mensual de features de IA por tienda. `period` = "YYYY-MM" (UTC).
+// Una fila por shop+mes; se hace upsert/increment al consumir.
+model AiUsage {
+  id        String   @id @default(cuid())
+  shop      String
+  period    String   // "YYYY-MM"
+  aiAlt     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([shop, period])
+  @@index([shop])
+}
