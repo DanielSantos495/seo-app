@@ -76,6 +76,15 @@ model SeoJob {
   @@index([shop, type, status])
 }
 
+// Configuración del merchant para la generación de contenido con IA.
+// `brandContext` = texto libre (voz de marca, industria, audiencia, etc.).
+model ShopSettings {
+  id           String   @id @default(cuid())
+  shop         String   @unique
+  brandContext String   @default("")
+  updatedAt    DateTime @updatedAt
+}
+
 // Consumo mensual de features de IA por tienda. `period` = "YYYY-MM" (UTC).
 // Una fila por shop+mes; se hace upsert/increment al consumir.
 model AiUsage {

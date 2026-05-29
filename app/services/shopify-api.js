@@ -57,6 +57,15 @@ export const GET_PRODUCT_SEO_QUERY = `#graphql
       title
       handle
       descriptionHtml
+      productType
+      vendor
+      tags
+      priceRangeV2 {
+        minVariantPrice {
+          amount
+          currencyCode
+        }
+      }
       seo {
         title
         description
@@ -75,6 +84,15 @@ export const GET_PRODUCT_SEO_QUERY = `#graphql
           }
         }
       }
+    }
+  }
+`;
+
+export const GET_SHOP_QUERY = `#graphql
+  query GetShop {
+    shop {
+      name
+      currencyCode
     }
   }
 `;
@@ -137,6 +155,7 @@ export async function fetchProductById(admin, gid) {
 // Aplana `media` (filtrando solo MediaImage) y `variants` — más cómodo para
 // el analyzer y el generador de alt texts. La shape `images` se mantiene por
 // compatibilidad con el analyzer; ahora cada `id` es un MediaImage GID.
+// Campos adicionales para la capa de contexto AI: productType, vendor, tags, price.
 function normalizeProduct(node) {
   const mediaImages = (node.media?.edges || [])
     .map((e) => e.node)
@@ -147,6 +166,10 @@ function normalizeProduct(node) {
     title: node.title,
     handle: node.handle,
     descriptionHtml: node.descriptionHtml || "",
+    productType: node.productType || "",
+    vendor: node.vendor || "",
+    tags: Array.isArray(node.tags) ? node.tags : [],
+    price: node.priceRangeV2?.minVariantPrice?.amount || null,
     seo: {
       title: node.seo?.title || "",
       description: node.seo?.description || "",
@@ -161,6 +184,20 @@ function normalizeProduct(node) {
       title: e.node.title,
       imageId: e.node.media?.edges?.[0]?.node?.id || null,
     })),
+  };
+}
+
+/**
+ * Devuelve nombre y moneda de la tienda. Campos vacíos si la API no responde.
+ * @param {object} admin
+ * @returns {Promise<{ name: string, currencyCode: string }>}
+ */
+export async function getShopContext(admin) {
+  const json = await shopifyGraphql(admin, GET_SHOP_QUERY);
+  const shop = json?.data?.shop;
+  return {
+    name: shop?.name || "",
+    currencyCode: shop?.currencyCode || "",
   };
 }
 
