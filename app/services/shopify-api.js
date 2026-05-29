@@ -394,6 +394,55 @@ export async function bulkFixAltTextsForProducts(
   };
 }
 
+// Mutación productUpdate (API 2026-04): actualiza SEO y/o descripción de un producto.
+// Arg confirmado: `product: ProductUpdateInput!` (NO el `input: ProductInput!` viejo).
+// Campos: `id` (obligatorio), `seo: { title, description }`, `descriptionHtml`.
+// Solo incluye en el input los campos que el caller pasa (undefined → omitidos).
+export const PRODUCT_UPDATE_SEO_MUTATION = `#graphql
+  mutation ProductUpdateSeo($product: ProductUpdateInput!) {
+    productUpdate(product: $product) {
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+/**
+ * Actualiza campos SEO y/o descripción de un producto vía `productUpdate`.
+ * Solo se mandan los campos que el caller provee (el resto se omite).
+ *
+ * @param {object} admin
+ * @param {string} productGid           - GID del producto (ej. "gid://shopify/Product/123").
+ * @param {object} fields
+ * @param {string} [fields.seoTitle]        - Meta title SEO.
+ * @param {string} [fields.seoDescription]  - Meta description SEO.
+ * @param {string} [fields.descriptionHtml] - Descripción del producto en HTML.
+ * @returns {Promise<{ ok: boolean, userErrors: Array }>}
+ */
+export async function updateProductSeoAndDescription(
+  admin,
+  productGid,
+  { seoTitle, seoDescription, descriptionHtml } = {},
+) {
+  const product = { id: productGid };
+
+  // Construye el objeto seo solo con los sub-campos presentes.
+  const seo = {};
+  if (seoTitle !== undefined) seo.title = seoTitle;
+  if (seoDescription !== undefined) seo.description = seoDescription;
+  if (Object.keys(seo).length > 0) product.seo = seo;
+
+  if (descriptionHtml !== undefined) product.descriptionHtml = descriptionHtml;
+
+  const json = await shopifyGraphql(admin, PRODUCT_UPDATE_SEO_MUTATION, {
+    variables: { product },
+  });
+  const userErrors = json?.data?.productUpdate?.userErrors || [];
+  return { ok: userErrors.length === 0, userErrors };
+}
+
 // Aplica nuevos alt texts a un producto vía `productUpdateMedia`.
 // `altTextsByImageId` es un Map o objeto { mediaId: newAltText }.
 // Devuelve { ok, userErrors }.
