@@ -57,8 +57,8 @@ export const action = async ({ request }) => {
 
   const locale = session.locale ?? null;
 
+  let text;
   try {
-    let text;
     if (field === "metaTitle") {
       text = await generateMetaTitle({ context, locale });
     } else if (field === "metaDescription") {
@@ -66,15 +66,23 @@ export const action = async ({ request }) => {
     } else {
       text = await generateDescription({ context, locale });
     }
-
-    // Incrementar solo en éxito.
-    await increment(session.shop, "aiMeta", 1);
-
-    return Response.json({ ok: true, field, text });
   } catch {
+    // Falló la generación (LLM caído/inválido): no se cobra quota.
     return Response.json({
       ok: false,
       error: "Generation failed. Please try again.",
     });
   }
+
+  // Cobrar la quota best-effort: una generación exitosa nunca se reporta como
+  // fallo por un error transitorio al persistir el uso (dirección segura:
+  // undercharge, nunca cobrar de más ni descartar texto ya generado).
+  try {
+    await increment(session.shop, "aiMeta", 1);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn("[generate-text] usage increment failed:", e?.message || e);
+  }
+
+  return Response.json({ ok: true, field, text });
 };

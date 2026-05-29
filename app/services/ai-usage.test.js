@@ -9,7 +9,27 @@ import {
   AI_ALT_COST_USD,
   COST_ALERT_USD,
 } from "./ai-usage.js";
-import { PLAN } from "./plan.js";
+import { PLAN, ENTITLEMENTS } from "./plan.js";
+import { readFileSync } from "node:fs";
+
+// Guard: el schema de Prisma debe tener una columna Int por cada key de quota
+// numérica de ENTITLEMENTS (aiAlt, aiMeta, ...). Atrapa la deriva schema↔código
+// (ej: cobrar contra "aiMeta" sin que exista la columna en AiUsage).
+describe("AiUsage schema ↔ ENTITLEMENTS", () => {
+  it("has an Int column for every numeric quota key", () => {
+    const ent = ENTITLEMENTS[PLAN.PRO_PLUS];
+    const quotaKeys = Object.keys(ent).filter((k) => typeof ent[k] === "number");
+    expect(quotaKeys.length).toBeGreaterThan(0);
+    const schema = readFileSync(
+      new URL("../../prisma/schema.prisma", import.meta.url),
+      "utf8",
+    );
+    const model = schema.match(/model AiUsage \{([\s\S]*?)\}/)?.[1] || "";
+    for (const key of quotaKeys) {
+      expect(model).toMatch(new RegExp(`\\b${key}\\b\\s+Int`));
+    }
+  });
+});
 
 // Mock del cliente Prisma — solo los métodos que usa ai-usage.js
 vi.mock("../db.server.js", () => ({

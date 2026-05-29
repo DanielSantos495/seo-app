@@ -92,6 +92,7 @@ model AiUsage {
   shop      String
   period    String   // "YYYY-MM"
   aiAlt     Int      @default(0)
+  aiMeta    Int      @default(0)
   updatedAt DateTime @updatedAt
 
   @@unique([shop, period])

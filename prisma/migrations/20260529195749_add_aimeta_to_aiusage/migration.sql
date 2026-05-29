@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "AiUsage" ADD COLUMN     "aiMeta" INTEGER NOT NULL DEFAULT 0;
