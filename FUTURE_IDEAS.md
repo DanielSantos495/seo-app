@@ -4,6 +4,20 @@ Backlog de mejoras que descartamos o pospusimos durante el MVP. Anotar acá cual
 
 ---
 
+## ✅ Estado V2 al 2026-05-29 — ya construido en la rama `dev`
+
+- **Paso 0 — Managed App Pricing**: tier reading + mapa de entitlements en código (sin features pagas todavía). Reemplaza la sección "Migración a Managed App Pricing" más abajo.
+- **Paso 1 — AI alt text con Claude Vision**: toggle "Generate with AI" en el bulk fix + per-producto, quota `aiAlt` 100/500, fallback a generador determinista. Implementa la sección "Alt text con IA" más abajo.
+- **Paso 2 — AI meta + descripción + capa de contexto + Settings**: generación per-producto de meta title / meta description / descripción (preview editable + apply explícito), quota `aiMeta` 50/300. **Nuevo:** capa de contexto reutilizable (`app/services/ai-context.js` + tabla `ShopSettings`) que alimenta TODAS las generaciones (alt text incluido) + sección **Settings** con el form de "Brand & store context". Implementa y amplía la sección "AI Description Generator" más abajo.
+
+**Doc de arquitectura completa:** [`docs/AI_ARCHITECTURE.md`](docs/AI_ARCHITECTURE.md). Planes: `docs/superpowers/plans/2026-05-2{8,9}-*.md`. Spec de tiering: `docs/superpowers/specs/2026-05-26-v2-monetization-tiering-design.md`.
+
+**Gate pre-launch (NO ejecutado aún):** `ANTHROPIC_API_KEY`/`ANTHROPIC_MODEL` en Railway · privacy update (Anthropic sub-procesador) en `cury-apps-site/privacy.html` · activar planes públicos en Managed Pricing · merge `dev` → `main`.
+
+> Lo de abajo conserva el brainstorming original como referencia histórica + el backlog que **no** está implementado (bulk masivo escalable, páginas/colecciones, análisis HTML estructural, Sidekick, multilenguaje, edición inline del alt, test de carga 1k+, upgrade Prisma 7, rename URL `/seo-analyzer/`→`/cury-seo/`).
+
+---
+
 ## Alt text con IA (Claude Vision)
 
 **Hoy**: el bulk fix usa el patrón naive `${title} - ${variante}` (sin IA, gratis, instantáneo).

@@ -17,6 +17,7 @@
 - **Revenue share Shopify**: 0% en primeros $1M USD vitalicios (aplicable cuando V2 introduzca pago).
 - **Mercado**: global, **inglés primero** (US/UK/AU/CA). UI 100% en inglés.
 - **Estado del código**: V1 cerrado. Gates de Pro removidos, billing eliminado, cache schema bumpeado a v2-free. Build y lint en verde. Modal de "Generate missing alt texts" recientemente rediseñado (commit `76dca6a`). App renombrada de "SEO Analyzer" → **Cury SEO** tras feedback de Shopify (commit `f519b70`).
+- **Estado V2 (rama `dev`, NO mergeado a `main`)**: pasos 0/1/2 construidos y testeados — Managed App Pricing + AI alt text (Claude Vision) + AI meta title/description + descripción + **capa de contexto reutilizable** + sección **Settings**. La IA no llama de verdad hasta configurar `ANTHROPIC_API_KEY`. Arquitectura completa: `docs/AI_ARCHITECTURE.md`. Planes: `docs/superpowers/plans/2026-05-2{7,8,9}-*.md`. Spec de tiering: `docs/superpowers/specs/2026-05-26-v2-monetization-tiering-design.md`. Mientras prod sigue en review, las §§ 8 "Monetización" y 10 "Pricing" más abajo describen el estado V1; el modelo V2 vive en esos docs.
 - **Stack**: React Router v7 + Polaris Web Components + Prisma 6.19 / PostgreSQL + GraphQL Admin API 2026-04. Gestor: **pnpm 11.2.2**, Node 22.
 - **URL producción (Railway)**: `https://seo-app-production-b4fa.up.railway.app`
 - **Marca + legales**: landing Cury SEO en `https://curyapps.com/seo-analyzer/`. Privacy en `/seo-analyzer/privacy.html`, Terms en `/seo-analyzer/terms.html`. Sitio Cloudflare Pages, repo `cury-apps-site` en GitHub.
