@@ -8,6 +8,8 @@ import { shopifyGraphql } from "./shopify-fetch";
 import { remaining, increment } from "./ai-usage";
 import { generateAltTextWithAI } from "./alt-text-ai";
 import { resizeCdnUrl } from "./image-url";
+import { getSettings } from "./shop-settings";
+import { buildContext } from "./ai-context";
 
 // En API 2026-04 las imágenes viven bajo `media` (modelo unificado con
 // videos/3D). Para SEO solo nos interesan las MediaImage.
@@ -230,9 +232,10 @@ export async function previewAltTextsForProducts(
 //   naiveAlts      - Map<imageId, string> del generador determinístico
 //   useAI          - boolean
 //   aiBudget       - número de generaciones AI disponibles (mutable fuera)
-//   aiFn           - async (imageUrl, productTitle, locale) → string | lanza
+//   aiFn           - async (imageUrl, productTitle, locale, context) → string | lanza
 //   productTitle   - título del producto (para aiFn)
 //   locale         - locale BCP-47 o null
+//   context        - bloque de contexto del merchant (opcional, para aiFn)
 //
 // Devuelve:
 //   { alts: Map<imageId, string>, aiUsed: number, naiveUsed: number }
@@ -245,6 +248,7 @@ export async function chooseAlts({
   aiFn,
   productTitle,
   locale,
+  context,
 }) {
   const alts = new Map();
   let aiUsed = 0;
@@ -260,6 +264,7 @@ export async function chooseAlts({
           resizeCdnUrl(image.url, 512),
           productTitle,
           locale,
+          context,
         );
         alts.set(image.id, aiAlt);
         aiUsed++;
@@ -310,6 +315,18 @@ export async function bulkFixAltTextsForProducts(
     aiBudget = await remaining(shop, plan, "aiAlt");
   }
 
+  // Contexto del merchant cargado una sola vez al inicio (evita N lecturas de DB).
+  let brandContext = "";
+  let shopInfo = null;
+  if (useAI && shop) {
+    const [settingsResult, shopInfoResult] = await Promise.all([
+      getSettings(shop),
+      getShopContext(admin),
+    ]);
+    brandContext = settingsResult.brandContext;
+    shopInfo = shopInfoResult;
+  }
+
   for (const gid of productGids) {
     try {
       const product = await fetchProductById(admin, gid);
@@ -347,15 +364,22 @@ export async function bulkFixAltTextsForProducts(
         (img) => !img.altText?.trim(),
       );
 
+      // Contexto por producto: combina info de tienda + producto + brand context.
+      const productContext =
+        useAI && shopInfo
+          ? buildContext({ shop: shopInfo, product, merchantContext: brandContext })
+          : null;
+
       const { alts, aiUsed, naiveUsed } = await chooseAlts({
         missingImages,
         naiveAlts,
         useAI,
         aiBudget,
-        aiFn: (imageUrl, productTitle, loc) =>
-          generateAltTextWithAI({ imageUrl, productTitle, locale: loc }),
+        aiFn: (imageUrl, productTitle, loc, ctx) =>
+          generateAltTextWithAI({ imageUrl, productTitle, locale: loc, context: ctx }),
         productTitle: product.title,
         locale,
+        context: productContext,
       });
 
       // Actualizar el budget local con lo consumido en este producto.

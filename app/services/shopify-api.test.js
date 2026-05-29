@@ -57,11 +57,12 @@ describe("chooseAlts", () => {
     // aiFn debe haberse llamado una vez por imagen.
     expect(aiFn).toHaveBeenCalledTimes(3);
     // Cada llamada recibe la URL (la de resizeCdnUrl, que devuelve igual),
-    // el título y el locale.
+    // el título, el locale y el context (undefined cuando no se pasa).
     expect(aiFn).toHaveBeenCalledWith(
       "https://cdn.shopify.com/img/img1.jpg",
       "Awesome Product",
       null,
+      undefined,
     );
 
     // Todos los alts son AI.

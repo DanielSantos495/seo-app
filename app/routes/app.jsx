@@ -23,8 +23,9 @@ export const loader = async ({ request }) => {
   const planLabel = name ? `${name} (${PLAN_LABEL[tier]})` : PLAN_LABEL[tier];
   const shopHandle = session.shop.replace(/\.myshopify\.com$/, "");
 
-  const [aiAltRemaining] = await Promise.all([
+  const [aiAltRemaining, aiMetaRemaining] = await Promise.all([
     remaining(session.shop, tier, "aiAlt"),
+    remaining(session.shop, tier, "aiMeta"),
   ]);
 
   return {
@@ -35,6 +36,7 @@ export const loader = async ({ request }) => {
     plan: tier,
     planLabel,
     aiAltRemaining,
+    aiMetaRemaining,
     upgradeUrl: pricingPageUrl(shopHandle),
   };
 };

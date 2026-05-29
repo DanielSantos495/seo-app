@@ -12,6 +12,7 @@ import { authenticate } from "../shopify.server";
 import {
   fetchProductById,
   bulkFixAltTextsForProducts,
+  updateProductSeoAndDescription,
 } from "../services/shopify-api";
 import { analyzeProduct } from "../services/seo-analyzer";
 import { generateAltTexts } from "../services/alt-text-generator";
@@ -20,6 +21,23 @@ import { productAdminUrl } from "../services/admin-links";
 import { resizeCdnUrl } from "../services/image-url";
 import { updateCachedItems } from "../services/seo-cache";
 import IssuesList from "../components/IssuesList";
+import AiTextField from "../components/AiTextField";
+
+// Escapa caracteres HTML especiales en texto plano.
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Convierte texto plano con párrafos (\n\n) a HTML con etiquetas <p>.
+function textToHtml(text) {
+  return text
+    .split(/\n\n+/)
+    .map((para) => `<p>${escapeHtml(para.trim())}</p>`)
+    .join("");
+}
 
 export const loader = async ({ request, params }) => {
   const { admin } = await authenticate.admin(request);
@@ -47,13 +65,64 @@ export const loader = async ({ request, params }) => {
 
 export const action = async ({ request, params }) => {
   const { admin, session, billing } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  const gid = `gid://shopify/Product/${params.id}`;
+
+  // -------------------------------------------------------------------------
+  // intent = "applyText": aplica un campo SEO generado por IA al producto.
+  // -------------------------------------------------------------------------
+  if (intent === "applyText") {
+    const field = formData.get("field");
+    const value = formData.get("value") ?? "";
+
+    // Mapear field → argumento de updateProductSeoAndDescription.
+    let updateArg;
+    if (field === "metaTitle") {
+      updateArg = { seoTitle: value };
+    } else if (field === "metaDescription") {
+      updateArg = { seoDescription: value };
+    } else if (field === "description") {
+      updateArg = { descriptionHtml: textToHtml(value) };
+    } else {
+      return { ok: false, error: "Unknown field." };
+    }
+
+    const { ok, userErrors } = await updateProductSeoAndDescription(
+      admin,
+      gid,
+      updateArg,
+    );
+    if (!ok) {
+      return { ok: false, error: userErrors.map((e) => e.message).join("; ") };
+    }
+
+    // Re-analizar y actualizar cache (mismo patrón que el path de alt fix).
+    const refreshed = await fetchProductById(admin, gid);
+    if (refreshed) {
+      const newAnalysis = analyzeProduct(refreshed);
+      await updateCachedItems(session.shop, [gid], (item) => ({
+        ...item,
+        score: newAnalysis.score,
+        issues: newAnalysis.issues,
+        thumbnailUrl: refreshed.images?.[0]?.url || item.thumbnailUrl,
+        thumbnailAlt: refreshed.images?.[0]?.altText || item.thumbnailAlt,
+      }));
+    }
+
+    return { ok: true, appliedField: field };
+  }
+
+  // -------------------------------------------------------------------------
+  // Path por defecto: alt fix (comportamiento existente).
+  // -------------------------------------------------------------------------
   // `useAI` es preferencia del cliente; el plan se resuelve server-side y la
   // quota gatea el uso real (free → budget 0 → sin IA). Reusamos el mismo
   // motor que el bulk (IA + quota + fallback determinista por imagen).
-  const useAI = (await request.formData()).get("useAI") === "true";
+  const useAI = formData.get("useAI") === "true";
   const { tier } = await getPlanInfo(billing);
 
-  const gid = `gid://shopify/Product/${params.id}`;
   const result = await bulkFixAltTextsForProducts(admin, [gid], {
     useAI,
     shop: session.shop,
@@ -98,7 +167,8 @@ const SCORE_TONE = (score) => {
 
 export default function ProductDetail() {
   const { product, analysis, proposedAlts } = useLoaderData();
-  const { plan, aiAltRemaining, upgradeUrl } = useRouteLoaderData("routes/app");
+  const { plan, aiAltRemaining, aiMetaRemaining, upgradeUrl } =
+    useRouteLoaderData("routes/app");
   const actionData = useActionData();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -109,7 +179,23 @@ export default function ProductDetail() {
   const editUrl = productAdminUrl(product.id);
   const featured = product.images?.[0];
   const missingAltCount = product.images.filter((i) => !i.altText).length;
+  // isApplying solo para el path de alt fix (submit sin intent específico).
   const isApplying = navigation.state === "submitting";
+  // isApplyingText: submit del intent applyText.
+  const isApplyingText =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") === "applyText";
+
+  // Callback compartido por los 3 AiTextField: envía intent=applyText.
+  const handleApplyText = ({ field, value }) => {
+    submit(
+      { intent: "applyText", field, value },
+      { method: "post" },
+    );
+  };
+
+  // Numeric product id para el fetcher de api.generate-text.
+  const productNumericId = product.id.replace(/^gid:\/\/shopify\/Product\//, "");
 
   // Toast cuando la acción termina. Usamos ref para asegurar que cada
   // actionData solo dispara UN toast (si el componente remonta o el loader
@@ -119,7 +205,9 @@ export default function ProductDetail() {
     if (!actionData || shownToastRef.current === actionData) return;
     shownToastRef.current = actionData;
     if (actionData.ok) {
-      if (actionData.count === 0) {
+      if (actionData.appliedField) {
+        shopify.toast.show("Field updated successfully");
+      } else if (actionData.count === 0) {
         shopify.toast.show("No images on this product need alt text");
       } else {
         const aiCount = actionData.aiCount ?? 0;
@@ -171,6 +259,53 @@ export default function ProductDetail() {
 
       <s-section heading="Issues to fix">
         <IssuesList issues={analysis.issues} editUrl={editUrl} />
+      </s-section>
+
+      <s-section heading="AI Text Generator">
+        <s-stack direction="block" gap="large">
+          {plan !== "free" && (
+            <s-text tone="subdued">
+              {aiMetaRemaining} AI generation{aiMetaRemaining === 1 ? "" : "s"} left this month
+            </s-text>
+          )}
+          <AiTextField
+            field="metaTitle"
+            label="Meta title"
+            currentValue={product.seo.title}
+            productId={productNumericId}
+            plan={plan}
+            aiMetaRemaining={aiMetaRemaining}
+            upgradeUrl={upgradeUrl}
+            onApply={handleApplyText}
+            isApplying={isApplyingText}
+          />
+          <AiTextField
+            field="metaDescription"
+            label="Meta description"
+            currentValue={product.seo.description}
+            productId={productNumericId}
+            plan={plan}
+            aiMetaRemaining={aiMetaRemaining}
+            upgradeUrl={upgradeUrl}
+            onApply={handleApplyText}
+            isApplying={isApplyingText}
+          />
+          <AiTextField
+            field="description"
+            label="Product description"
+            currentValue={
+              product.descriptionHtml
+                ? product.descriptionHtml.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120)
+                : ""
+            }
+            productId={productNumericId}
+            plan={plan}
+            aiMetaRemaining={aiMetaRemaining}
+            upgradeUrl={upgradeUrl}
+            onApply={handleApplyText}
+            isApplying={isApplyingText}
+          />
+        </s-stack>
       </s-section>
 
       <s-section slot="aside" heading="Quick actions">

@@ -26,12 +26,14 @@ const SYSTEM_PROMPT =
  * @param {string} opts.imageUrl      - URL pública de la imagen.
  * @param {string} opts.productTitle  - Título del producto.
  * @param {string} [opts.locale]      - Locale BCP-47 (ej. "es", "fr"). Omitir para inglés.
+ * @param {string} [opts.context]     - Contexto del merchant (buildContext output). Opcional.
  * @returns {Promise<string>}         - Alt text ≤125 chars, ya truncado.
  * @throws {Error}                    - En cualquier fallo.
  */
-export async function generateAltTextWithAI({ imageUrl, productTitle, locale }) {
+export async function generateAltTextWithAI({ imageUrl, productTitle, locale, context }) {
+  const contextPrefix = context ? `${context}\n\n` : "";
   const userText =
-    `Product: ${productTitle}. Write the alt text` +
+    `${contextPrefix}Product: ${productTitle}. Write the alt text` +
     (locale ? ` in the language of locale "${locale}".` : ".");
 
   const messages = [
