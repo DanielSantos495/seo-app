@@ -61,6 +61,7 @@ export default function App() {
         <NavLink to="/app">Dashboard</NavLink>
         <NavLink to="/app/products">Products</NavLink>
         <NavLink to="/app/issues">Issues</NavLink>
+        <NavLink to="/app/settings">Settings</NavLink>
       </s-app-nav>
       {isNavigatingAway ? (
         <RouteSkeleton path={navigation.location.pathname} />
